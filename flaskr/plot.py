@@ -1,4 +1,4 @@
-from .rental import Rental
+from rental import Rental
 class Plot:
     # --- identity & Geometry ---
     plot_id: int
@@ -14,6 +14,8 @@ class Plot:
     status: str
     
     # --- Rental / Ownership ---
+    waitlist: list
+
     rental: Rental
     co_owners: list
    
@@ -65,6 +67,7 @@ class Plot:
 
 
         self.rental = None
+        self.waitlist = []
       
 
         self.sunlight_hours = 0

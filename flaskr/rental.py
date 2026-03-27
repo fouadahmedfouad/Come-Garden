@@ -1,11 +1,17 @@
 from datetime import datetime, timedelta
 
 class Rental:
-    def __init__(self, plot, total_price,season):
+    def __init__(self, plot, total_price,season,status="Active"):
         self.plot = plot
-        self.season = season
         self.total_price = total_price
-        self.participants = []  # [{member, share, paid}]
+        self.participants = [] ##TODO Move to Particpation class
+        self.status = status
+       
+        self.season = season
+        self.start_date = max(datetime.now(), season.start_date)
+        self.end_date = season.end_date
+
+        self.joined_mid_season = datetime.now() > season.start_date
 
     def add_participant(self, member, share):
 

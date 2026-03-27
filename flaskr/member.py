@@ -1,9 +1,13 @@
 class Member:
-    def __init__(self,name, credits=0, mytype="normal"):
-        self.credits = credits
+    def __init__(self,id,name,mytype="normal"):
+        
+        self.id   = id
         self.name = name
         self.type = mytype
 
+        self.credits = 0
+        self.contribution_points = 0 
+        
         self.rental_history = []
         self.inventory = []
 
