@@ -383,7 +383,7 @@ class Allotment():
             self.errno  = -2
             return None 
 
-        # print(f"{member.name} rented {share*100:.0f}% of plot {plot_id}")
+        print(f"{member.name} rented {share*100:.0f}% of plot {plot_id}")
         return plot
 
     def rent_plot(self,plot_id):
@@ -396,7 +396,14 @@ class Allotment():
 
         for record in plot.waitlist:
             _,share,member_id = record
+
             self._rent_plot(plot.id,member_id,share) 
+            errno = self.errno
+
+            if errno == -1:
+                return -1
+            else:
+                continue
 
         plot.waitlist = []
         return 1 
@@ -524,11 +531,11 @@ def test_renew_before_rent():
     alt.apply(1,member_id4,0.1)
     print("Wait",plot.waitlist)
 
+    print("Season 1")
     # Season 1 starts
     alt.renew_rental(plot,plot.rental)
     alt.rent_plot(1)
 
-    print("Season 1 members")
     for p in plot.rental.participants:
         print(p.member.name)
 
@@ -542,29 +549,35 @@ def test_renew_before_rent():
         if i == 2:
             break
  
+    print(alt.plots[1].rental.participants)
 
     member_id5 = alt.join_member("New Member")
     member = alt.members[member_id5]
     member.credits = 200
     
-    ## Accepting applications during season 1
+    ## Accepting applications
     alt.apply(1,member_id5,0.2)
     alt.apply(1,member_id4,0.2)
-     ## if the plot is available we can allow rent (considering it will end by the end of the season)
+     ## if available we can allow rent (considering it will end by the end of the season)
 
     print("Wait",plot.waitlist)
 
     ## End of season 1, and Start of Season 2
     alt.renew_rental(plot,plot.rental)
     alt.rent_plot(1)
-
+   
+    
+    ## auto-renew got it, new member got it over the resident (because rentals are added to the history after it ends, and the season wasn't yet ended when new member applied)
     print("Season 2 members")
+    # for m in alt.members.values():
+    #     print(m.name)
+    #     print(m.rental_history)
+    #     print(alt.calculate_residency_duration(m.id))
+    #  
+    #
     for p in plot.rental.participants:
         print(p.member.name)
-
-
-    ## auto-renew got it, new member got it over the resident (because rentals are added to the history after it ends, and the season wasn't yet ended when new member applied)
-  
+   
 
     ## set auto_renew for current participant for the member 
     i = 0
@@ -573,21 +586,7 @@ def test_renew_before_rent():
         i += 1
         if i == 2:
             break
-
-
-     
-    member_id6 = alt.join_member("New Member2")
-    member = alt.members[member_id6]
-    member.credits = 200
-
- 
-    ## Accepting applications during season 2
-    alt.apply(1, member_id6, 0.2)
-    alt.apply(1, member_id4, 0.2)
-        ## if the plot is available we can allow rent (considering it will end by the end of the season)
-
-    print("Wait",plot.waitlist)
-
+    
     ## End of season 2, and Start of Season 3
     alt.renew_rental(plot,plot.rental)
     alt.rent_plot(1)
@@ -595,13 +594,16 @@ def test_renew_before_rent():
     print("Season 3 members")
     for p in plot.rental.participants:
         print(p.member.name)
-
-    ## auto-renew got it, member_id4 got it for his residency priority over the new member.
-
+       
+    #
+    # alt.apply(1,member_id5,0.2)
+    # alt.apply(1,member_id4,0.2)
+    # print("Wait",plot.waitlist)
+    #
     # ## end of another season
     # alt.renew_rental(plot,plot.rental)
     # alt.rent_plot(1)
-    #
+    # 
 
     
 test_renew_before_rent()

@@ -5,9 +5,10 @@ class Participant:
         self.member = member
         self.share = share
         self.cost = cost
-        self.paid = True
         self.auto_renew = auto_renew
-
+        
+        self.start_date = None
+        self.end_date   = None
         self.status = "Active"
 
 class Rental:
@@ -17,10 +18,10 @@ class Rental:
         self.participants = []
         self.status = status
 
-        self.start_date = max(datetime.now(), season.start_date)
+        self.start_date = max(datetime.now().date(), season.start_date)
         self.end_date = season.end_date
 
-        self.joined_mid_season = datetime.now() > season.start_date
+        self.joined_mid_season = datetime.now().date() > season.start_date
 
     def _add_participant(self, member, share, calculated_cost, auto_renew):
 
@@ -39,6 +40,10 @@ class Rental:
         member.credits -= cost
 
         participant = Participant(member, share, cost, auto_renew)
+
+        participant.start_date = self.start_date
+        participant.end_date   = self.end_date
+
         self.participants.append(participant)
 
     def total_share(self):

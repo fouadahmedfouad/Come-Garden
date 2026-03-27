@@ -1,4 +1,4 @@
-from rental import Rental
+from .rental import Rental
 class Plot:
     # --- identity & Geometry ---
     plot_id: int
