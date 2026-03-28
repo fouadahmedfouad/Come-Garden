@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
+from .time import TimeProvider
 
 class Participant:
-    def __init__(self, member, share, cost, auto_renew):
+    def __init__(self, member, share, cost, late, auto_renew):
         self.member = member
         self.share = share
         self.cost = cost
@@ -10,6 +11,7 @@ class Participant:
         self.start_date = None
         self.end_date   = None
         self.status = "Active"
+        self.late = late
 
 class Rental:
     def __init__(self, plot, total_price, season, status="Active"):
@@ -21,9 +23,8 @@ class Rental:
         self.start_date = max(datetime.now().date(), season.start_date)
         self.end_date = season.end_date
 
-        self.joined_mid_season = datetime.now().date() > season.start_date
 
-    def _add_participant(self, member, share, calculated_cost, auto_renew):
+    def _add_participant(self, member, share, calculated_cost, season, auto_renew):
 
         for p in self.participants:
             if p.member == member:
@@ -39,7 +40,12 @@ class Rental:
 
         member.credits -= cost
 
-        participant = Participant(member, share, cost, auto_renew)
+        today = TimeProvider().now()
+        midpoint = season.start_date + (season.end_date - season.start_date) / 2 
+        late = today > midpoint
+
+
+        participant = Participant(member, share, cost, late, auto_renew)
 
         participant.start_date = self.start_date
         participant.end_date   = self.end_date
