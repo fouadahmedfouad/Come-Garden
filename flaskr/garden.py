@@ -1,21 +1,18 @@
 from .rental import Rental 
 from .plot import Plot
 from .member import Member
-from .time import TimeProvider
+from .environment import TimeProvider, Season
 from datetime import datetime, timedelta, timezone
+
+from .config import  PLOTS, PLOT_PRICING, SOIL_PRICE_MODIFIER, MEMBERSHIP_DISCOUNT, SUN_SCHEDULE
+
+
 # Tips:
 ## Be realsitc
 ## Put constraints
 ## automate
 
-
-class Season():
-    def __init__(self, name, start_date, end_date):
-        self.name = name
-        self.start_date = start_date
-        self.end_date   = end_date
-
-class Allotment():
+class Garden():
 
     def __init__(self,width,height,road=2):
         self.allotment_width = width
@@ -33,79 +30,34 @@ class Allotment():
         
         self.errno = 0
 
-    PLOTS = {
-        "large": {"w": 20, "h": 10},
-        "small": {"w": 6.3, "h": 3.3}
-    }
+    @staticmethod
+    def build_seasons(year):
+        return [
+            Season("Spring", datetime(year, 3, 1).date(), datetime(year, 5, 31).date()),
+            Season("Summer", datetime(year, 7, 1).date(), datetime(year, 10, 31).date()),
+            Season("Fall", datetime(year, 11, 1).date(), datetime(year, 11, 30).date()),
+            Season("Winter", datetime(year, 12, 1).date(), datetime(year + 1, 2, 28).date()),
+        ]
+    
+    def update_current_season(self):
+        today = self.time_provider.now()
+    
+        for season in self.seasons:
+            if season.start_date <= today <= season.end_date:
+                self.current_season = season
+                return
+    
+        self.current_season = None
 
-    PLOT_PRICING = {
-        "small": 10,
-        "large": 30
-    }
-
-    SOIL_PRICE_MODIFIER = {
-        "normal": 1.0,
-        "premium": 1.5
-    }
-
-    MEMBERSHIP_DISCOUNT = {
-        "normal": 1.0,
-        "premium": 0.8
-    }
-
-    sun_schedule = {
-    "left": {
-        "8am": 0.0,
-        "9am": 0.0,
-        "10am": 0.5,
-        "11am": 1.0,
-        "12pm": 1.0,
-        "1pm": 1.0,
-        "2pm": 1.0,
-        "3pm": 0.5,
-        "4pm": 0.5,
-        "5pm": 0.0,
-        "6pm": 0.0,
-        "7pm": 0.0,
-        "8pm": 0.0,
-        "9pm": 0.0,
-    },
-
-    "middle": {
-        "8am": 0.5,
-        "9am": 1.0,
-        "10am": 1.0,
-        "11am": 1.0,
-        "12pm": 1.0,
-        "1pm": 1.0,
-        "2pm": 1.0,
-        "3pm": 1.0,
-        "4pm": 0.5,
-        "5pm": 0.5,
-        "6pm": 0.5,
-        "7pm": 0.0,
-        "8pm": 0.0,
-        "9pm": 0.0,
-    },
-
-    "right": {
-        "8am": 1.0,
-        "9am": 1.0,
-        "10am": 1.0,
-        "11am": 1.0,
-        "12pm": 1.0,
-        "1pm": 1.0,
-        "2pm": 1.0,
-        "3pm": 1.0,
-        "4pm": 1.0,
-        "5pm": 1.0,
-        "6pm": 0.5,
-        "7pm": 0.5,
-        "8pm": 0.0,
-        "9pm": 0.0,
-    }
-    }
-
+    def get_next_season(self):
+        today = self.time_provider.now()
+    
+        for season in self.seasons:
+            if season.start_date > today:
+                return season
+    
+        return None
+    
     def assign_zone(self,x):
         if x < 0.25:
             return "left"
@@ -124,7 +76,7 @@ class Allotment():
         zone = self.assign_zone(nx)
     
         plot.zone = zone
-        plot.sun_profile = self.sun_schedule[zone] 
+        plot.sun_profile = SUN_SCHEDULE[zone] 
  
     def create_plot(self,plot_id,plot_size,x,y,w,h):
         center = (round(x,2), round(y,2))
@@ -143,17 +95,6 @@ class Allotment():
         self.plots[plot.id] = plot
         self.plots_by_type[plot_size].append(plot)
     
-    def join_member(self,memberFullName):
-        for member in self.members.values():
-            if member.name == memberFullName:
-                return f"{member.name} Already exist with Id {member.id}"
-        
-        member_id = len(self.members)
-        member = Member(member_id,memberFullName)
-        self.members[member.id] = member
-        
-        return member.id
-    
     def cad_render(self,large_pts,small_pts):
         try: 
             import cadquery as cq
@@ -164,8 +105,8 @@ class Allotment():
         alt_w = self.allotment_width
         alt_h = self.allotment_height
         
-        lw, lh = self.PLOTS["large"]["w"], self.PLOTS["large"]["h"]
-        sw, sh = self.PLOTS["small"]["w"], self.PLOTS["small"]["h"] 
+        lw, lh = PLOTS["large"]["w"], PLOTS["large"]["h"]
+        sw, sh = PLOTS["small"]["w"], PLOTS["small"]["h"] 
 
         alt_thickness = 1
         plt_thickness = 3
@@ -190,7 +131,7 @@ class Allotment():
         alt_h = self.allotment_height
         road  = self.road
         
-        lw, lh = self.PLOTS["large"]["w"], self.PLOTS["large"]["h"]
+        lw, lh = PLOTS["large"]["w"], PLOTS["large"]["h"]
     
         # LARGE PLOTS FIRST (GREEDY) 
         stepLx, stepLy = lw + road, lh + road 
@@ -210,7 +151,7 @@ class Allotment():
         remaining_width  = alt_w - used_width
         remaining_height = alt_h - used_height
         
-        sw, sh = self.PLOTS["small"]["w"], self.PLOTS["small"]["h"]
+        sw, sh = PLOTS["small"]["w"], PLOTS["small"]["h"]
         stepSx = sw + road
         stepSy = sh + road
         
@@ -249,7 +190,7 @@ class Allotment():
         plot_id = 1 
 
         # LARGE
-        lw, lh = self.PLOTS["large"]["w"], self.PLOTS["large"]["h"]
+        lw, lh = PLOTS["large"]["w"], PLOTS["large"]["h"]
         for (x,y) in large_pts:
             plot = self.create_plot(plot_id,"large",x,y,lw,lh)
             self.assign_sun_profile(plot,alt_w) 
@@ -257,7 +198,7 @@ class Allotment():
             plot_id += 1
 
         # SMALL 
-        sw, sh = self.PLOTS["small"]["w"], self.PLOTS["small"]["h"] 
+        sw, sh = PLOTS["small"]["w"], PLOTS["small"]["h"] 
         if small_pts:
             for (x,y) in small_pts:
                 plot = self.create_plot(plot_id,"small",x,y,sw,sh) 
@@ -268,11 +209,17 @@ class Allotment():
         self.totalLargePlots = len(large_pts)
         self.totalSmallPlots = len(small_pts)
         self.totalPlots = len(large_pts) + len(small_pts)
-        
-        # print("Total plots:", self.totalPlots)        
-        # print("Large plots:", self.totalLargePlots)
-        # print("Small plots:", self.totalSmallPlots)
 
+    def join_member(self,memberFullName):
+        for member in self.members.values():
+            if member.name == memberFullName:
+                return f"{member.name} Already exist with Id {member.id}"
+        
+        member_id = len(self.members)
+        member = Member(member_id,memberFullName)
+        self.members[member.id] = member
+        
+        return member.id
     
     def get_member_tier_factor(self,member):
         count = len(member.rental_history)
@@ -288,9 +235,9 @@ class Allotment():
         plot = self.plots.get(plot_id)
         member= self.members[member_id]
 
-        base = self.PLOT_PRICING[plot.size]
-        soil_factor = self.SOIL_PRICE_MODIFIER.get(plot.soil_quality, 1)
-        discount = self.MEMBERSHIP_DISCOUNT.get(member.type, 1)
+        base = PLOT_PRICING[plot.size]
+        soil_factor = SOIL_PRICE_MODIFIER.get(plot.soil_quality, 1)
+        discount    = MEMBERSHIP_DISCOUNT.get(member.type, 1)
         tier_factor = self.get_member_tier_factor(member)
 
         return base * soil_factor * discount * tier_factor
@@ -322,11 +269,10 @@ class Allotment():
         except ValueError:
             return False
 
-    ## duration should be one season for all plots
+    ## duration is one season for all plots
     def _rent_plot(self, plot_id, member_id, share=1.0):
-
         plot = self.plots.get(plot_id)
-        plot_cost = self.PLOT_PRICING[plot.size]
+        plot_cost = PLOT_PRICING[plot.size]
         member = self.members.get(member_id)
         current_season = self.current_season
 
@@ -382,7 +328,7 @@ class Allotment():
     
     def renew_rental(self, plot, old_rental):
         next_season = self.get_next_season()
-        plot_cost = self.PLOT_PRICING[plot.size]
+        plot_cost = PLOT_PRICING[plot.size]
 
         if old_rental is None:
             return
@@ -418,45 +364,6 @@ class Allotment():
 
         return plot.rental   
 
-
-    # def audit_rental_alert(self):
-
-    #     for plot in self.plots.values():  
-    #         if plot.rental:
-    #             if plot.rental.status != "Active":
-    #                 return
-        
-    #             if datetime.now().date() >= plot.rental.end_date.date() - timedelta(days=15):
-                
-    #                 for p in plot.rental.participants:
-                    
-    #                     if p.auto_renew:
-    #                         p.status = "ExpiringSoon"
-    #                     else:
-    #                         p.status = "PendingTermination"
-
-
-    def update_current_season(self):
-        today = self.time_provider.now()
-    
-        for season in self.seasons:
-            if season.start_date <= today <= season.end_date:
-                self.current_season = season
-                return
-    
-        self.current_season = None
-    
-    
-    def get_next_season(self):
-        today = self.time_provider.now()
-    
-        for season in self.seasons:
-            if season.start_date > today:
-                return season
-    
-        return None
-
-
     def audit_rental_end(self):
         today = self.time_provider.now()
 
@@ -468,26 +375,32 @@ class Allotment():
                 continue
     
             if today >= rental.end_date:
-                print(f"Today is the day for ending {plot.id} rental")
+                print(f"Today is the day for ending plot {plot.id} rental")
                 self.renew_rental(plot, rental)
 
     def audit_rent_plots(self):
        for plot in self.plots.values():
             if plot.is_available():
                 self.rent_plot(plot.id)  
+
+    def audit_rental_alert(self):
+
+        for plot in self.plots.values():  
+            if plot.rental:
+                if plot.rental.status != "Active":
+                    return
+                
+                if self.time_provider.now() >= plot.rental.end_date - timedelta(days=15):
+                
+                    for p in plot.rental.participants:
+                    
+                        if p.auto_renew:
+                            p.status = "ExpiringSoon" # check your credits for renewal
+                        else:
+                            p.status = "PendingTermination" 
             
-    @staticmethod
-    def build_seasons(year):
-        return [
-            Season("Spring", datetime(year, 3, 1).date(), datetime(year, 5, 31).date()),
-            Season("Summer", datetime(year, 7, 1).date(), datetime(year, 10, 31).date()),
-            Season("Fall", datetime(year, 11, 1).date(), datetime(year, 11, 30).date()),
-            Season("Winter", datetime(year, 12, 1).date(), datetime(year + 1, 2, 28).date()),
-        ]
-
     ## then we may audit to rebuild seasons for new season
-
-    def make(self):
+    def build(self):
         year = self.time_provider.now().year
 
         self.seasons = ( 
@@ -498,171 +411,3 @@ class Allotment():
         self.update_current_season()
         self.plot_maker()
         return self
-
-def test_renew_before_rent():
-    alt = Allotment(100,50).make()
-    plot = alt.plots[1]
-    
-    member_id  = alt.join_member("Fouad ahmed fouad")  
-    member_id2 = alt.join_member("Ahmed fouad")
-    member_id3 = alt.join_member("Alice marchel")
-    member_id4 = alt.join_member("Dan alex")
-
-    member = alt.members[member_id]
-    member2 = alt.members[member_id2]
-    member3 = alt.members[member_id3]
-    member4 = alt.members[member_id4]
-
-    member.credits = 200
-    member2.credits = 200
-    member3.credits = 200
-    member4.credits = 200
-    
-
-
-    alt.apply(1,member_id,0.1)   
-    alt.apply(1,member_id2,0.1)
-    alt.apply(1,member_id3,0.1)
-    alt.apply(1,member_id4,0.1)
-    print("Wait",plot.waitlist)
-
-    # Season 1 starts
-    alt.audit_rental_end()
-    alt.audit_rent_plots()
-
-    print("Season 1 members")
-    for p in plot.rental.participants:
-        print(p.member.name)
-
-
-    ## set auto_renew for current participant for the member 
-    # i = 0
-    # for p in plot.rental.participants:
-    #     p.auto_renew = True
-    #     i += 1
-    #     if i == 2:
-    #         break
- 
-
-    member_id5 = alt.join_member("New Member")
-    member = alt.members[member_id5]
-    member.credits = 200
-    
-    ## Accepting applications during season 1
-    alt.apply(1,member_id5,0.2)
-    alt.apply(1,member_id4,0.2)
-     ## if the plot is available we allow rent (considering it will end by the end of the season no matter how late you are)
-    alt.audit_rental_end()
-    alt.audit_rent_plots()
-
-    print("Season 1 members")
-    for p in plot.rental.participants:
-        print(p.member.name)
-
-
-     
-    # print("Season 2 members")
-    # for p in plot.rental.participants:
-    #     print(p.member.name)
-
-        
-    # member_id6 = alt.join_member("New Member2")
-    # member = alt.members[member_id6]
-    # member.credits = 200
-
- 
-    # ## Accepting applications during season 2
-
-    # alt.apply(1, member_id6, 0.1)
-    # alt.apply(1, member_id4, 0.1)
-    #     ## if the plot is available we can allow rent (considering it will end by the end of the season)
-    # alt.audit_rent_plots()
-
-
-    # alt.audit_rental_end() 
-    # alt.audit_rent_plots()
-    
-    # print("Season 3 members")
-    # for p in plot.rental.participants:
-    #     print(p.member.name)
-
-    # # End of season 1, and Start of Season 2
-    # alt.renew_rental(plot,plot.rental)
-    # alt.rent_plot(1)
-
-    # print("Season 2 members")
-    # for p in plot.rental.participants:
-    #     print(p.member.name)
-
-
-    # ## auto-renew got it, new member got it over the resident (because rentals are added to the history after it ends, and the season wasn't yet ended when new member applied)
-  
-
-    # ## set auto_renew for current participant for the member 
-    # i = 0
-    # for p in plot.rental.participants:
-    #     p.auto_renew = True
-    #     i += 1
-    #     if i == 2:
-    #         break
-
-
-     
-    # member_id6 = alt.join_member("New Member2")
-    # member = alt.members[member_id6]
-    # member.credits = 200
-
- 
-    # ## Accepting applications during season 2
-    # alt.apply(1, member_id6, 0.2)
-    # alt.apply(1, member_id4, 0.2)
-    #     ## if the plot is available we can allow rent (considering it will end by the end of the season)
-
-    # print("Wait",plot.waitlist)
-
-    # ## End of season 2, and Start of Season 3
-    # alt.renew_rental(plot,plot.rental)
-    # alt.rent_plot(1)
-
-    # print("Season 3 members")
-    # for p in plot.rental.participants:
-    #     print(p.member.name)
-
-    # ## auto-renew got it, member_id4 got it for his residency priority over the new member.
-
-    # ## end of another season
-    # alt.renew_rental(plot,plot.rental)
-    # alt.rent_plot(1)
-    #
-
-    
-test_renew_before_rent()
-
-## generate_layout(), plot_maker(), apply(), 
-
-
-
-
-
-
-# ## after all applications
-
-
-
-# # before the end by 15 days
-# allot.audit_rental_alert()
-# for p in plot.rental.participants:
-#     print(p.member.name, p.status)
-
-# # at the end of the season
-# allot.apply(1,member_id2,0.1)
-# allot.apply(1,member_id4,0.1)
-
-# print("Wait",plot.waitlist)
-# allot.audit_rental_end()
-
-
-# # Allotment
-# # generate_layout(), plot_maker()
-# #
-#
