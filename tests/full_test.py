@@ -57,10 +57,7 @@ def test_renew_before_rent():
 
     alt.renew_rental(plot,plot.rental)
     alt.rent_plot(1)
-#
-#
-#
-#
+
 # def test_renew_before_rent():
 #     alt = Allotment(100,50).build()
 #     plot = alt.plots[1]

@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from .environment import TimeProvider
+from environment import TimeProvider
 
 class Participant:
     def __init__(self, member, share, cost, late, auto_renew):

@@ -1,16 +1,11 @@
-from .rental import Rental 
-from .plot import Plot
-from .member import Member
-from .environment import TimeProvider, Season
-from datetime import datetime, timedelta, timezone
+from rental import Rental 
+from plot import Plot
+from member import Member
+from environment import TimeProvider, Season
+from datetime import datetime, timedelta
 
-from .config import  PLOTS, PLOT_PRICING, SOIL_PRICE_MODIFIER, MEMBERSHIP_DISCOUNT, SUN_SCHEDULE
+from config import  PLOTS, PLOT_PRICING, SOIL_PRICE_MODIFIER, MEMBERSHIP_DISCOUNT, SUN_SCHEDULE
 
-
-# Tips:
-## Be realsitc
-## Put constraints
-## automate
 
 class Garden():
 
@@ -95,13 +90,16 @@ class Garden():
         self.plots[plot.id] = plot
         self.plots_by_type[plot_size].append(plot)
     
-    def cad_render(self,large_pts,small_pts):
+    def cad_render(self):
         try: 
             import cadquery as cq
             from ocp_vscode import show
         except ImportError:
             raise RuntimeError("cad_render requires cadquery and ocp_vscode installed")
-      
+
+        large_pts = self.large_pts
+        small_pts = self.small_pts
+
         alt_w = self.allotment_width
         alt_h = self.allotment_height
         
@@ -209,6 +207,9 @@ class Garden():
         self.totalLargePlots = len(large_pts)
         self.totalSmallPlots = len(small_pts)
         self.totalPlots = len(large_pts) + len(small_pts)
+
+        self.large_pts = large_pts
+        self.small_pts = small_pts
 
     def join_member(self,memberFullName):
         for member in self.members.values():
