@@ -1,0 +1,121 @@
+Garden:
+Geo and renting.
+Planting crops in the plot.
+Soil health, automated irrigation scheduling, and seasonal winterizing checklist.
+Pest disease infection alert, compliance audit and Composot contribution tracker.
+
+
+
+Communal Tasks:
+    diffculity score.
+
+Shift load balancer. ** weather-driven shift cancellation
+Members required service hours.
+Shift substitution between Members.
+Emergency site-status broadcaster.
+Votes between members for fund allocation.
+Garden security.
+Mentorship.
+Incident & hazard reporting with severity priotization.
+
+Canning Events.
+RBAC.
+SAT.
+Database integrity manager.
+
+
+Task01: Geo and Renting. (DONE)
+
+Task02: Planting crops in the plot.
+TAsk03: Soil Health, automated irrigtion scheduling, and seasonal winterizing checklist.
+Task04: Pest disease infection alert, compliance audit and Composot contribution tracker. system audit Trial.
+
+Task06: Emergency site-status broadcaster, Incident & hazard reporting with SP, and Votes between members for fund allocation.
+Task07: Canning Events.
+Task08: RBAC.
+Task09: Database integrity manager.
+
+Task11: Bank, withdraw & deposit, Item tracker with reorder alert.
+Task12: Tool library, Booking, tool damage reporting.
+Task13: Tool cleaning verfication and Penalty.
+
+Task05: Communal Tasks, Shift load balancer, and Weather-driven shift cancellation. MRSH, and shift substution between members.
+
+
+Task21: MarketPlace, karma points, Harvest surplus prediction.
+Task22: flaging produces, A peer-rating system.
+Task23: P2P advice Exchange.
+
+
+--------
+Bank: 
+seeds: dict;
+seedsInfo:
+    viability;
+    age;        ** expire tracker, priority in withdraw
+    flag GT;
+    PP;
+    LAH;
+    pdfs,vidoes tutorials.
+
+withdraw & despoist.
+Item tracker with reorder alert.
+
+Tool library:
+tools: dict;
+toolsInfo:
+    tools status;
+    total_usage_hours; ** add status for servicing after X hours;
+    pdfs, video tutorials.
+
+Booking;  (tool)
+tool damage reporting.
+tool clearning verfication. ** before booking is completed.
+Penalty; ** creating volunteer task or paying fine & block booking till paying the penalty
+
+
+
+
+Booking {
+  id,
+  toolId,
+  userId,
+  endTime,
+  actualReturnTime,
+  status,              // in_use, overdue, completed
+  penaltyId
+}
+
+Penalty {
+  id,
+  userId,
+  bookingId,
+  type,               // "fine" or "service"
+  amount,             // money OR hours
+  status,             // pending, completed, waived
+  createdAt
+}
+
+VolunteerTask {
+  id,
+  userId,
+  hoursRequired,
+  hoursCompleted,
+  source,            // "penalty" or "voluntary"
+  relatedPenaltyId
+}
+
+-----
+MarketPlace.
+Listing:
+    flash or normal
+    request ** if normal what is in return
+
+if listing is for free give the owner of the trade karma points.
+Harvest Surplus prediction alerting marketplace.
+flaging produces in the marketplace.
+P2P advice Exchange between members.
+A peer-rating system based on the product quality traded.
+
+
+

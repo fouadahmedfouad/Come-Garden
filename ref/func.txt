@@ -1,0 +1,2 @@
+Geo-rent:
+The system shall allow members to apply for plot rentals, manage applications via a prioritized waitlist based on residency duration and contribution points, calculate rental costs using plot characteristics and member attributes (including member type and tier), and support an auto-renewal mechanism that enables members to maintain or improve their priority for future seasonal rentals.

@@ -1,8 +1,8 @@
 from rental import Rental
 class Plot:
     # --- identity & Geometry ---
-    plot_id: int
-    plot_size: str
+    id: int
+    size: str
     center: tuple
 
     width: int
@@ -12,19 +12,19 @@ class Plot:
     boundary: dict
     neighbors: list[int]
     status: str
-    
+   
+    subPlots:list
+
     # --- Rental / Ownership ---
     waitlist: list
-
     rental: Rental
-    co_owners: list
-   
-    # --- Environment ---
-    sunlight_hours: int
-    sunlight_level: str
+  
 
-    soil_type: str
+    # --- Environment ---
+    sun_profile: dict
     soil_quality: str
+
+
     moisture_level: int
 
 
@@ -61,22 +61,18 @@ class Plot:
        
         self.zone = None
         self.sun_profile = None
-
-        
-        self.neighbors = []
-
-
+ 
         self.rental = None
         self.waitlist = []
       
+        self.sun_profile = None
 
-        self.sunlight_hours = 0
-        self.sunlight_level = None
-        
-        self.rental = None
+
+
+        self.neighbors = []
         self.tasks = []
-
         self.soil_quality = soil_quality
+
 
 
     def is_available(self):

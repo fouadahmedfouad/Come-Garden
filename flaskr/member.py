@@ -9,8 +9,11 @@ class Member:
         self.contribution_points = 0 
         
         self.rental_history = []
-        self.inventory = []
 
+        self.booking_ids = []
+        self.inventory = []
+    
+   
 
     def add_rental(self,rental):
         self.rental_history.append(rental)

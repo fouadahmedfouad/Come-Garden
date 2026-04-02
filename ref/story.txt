@@ -1,0 +1,18 @@
+The system manages a garden where members can apply to rent plots or part of a plot defined by a share variable. The garden handles rental applications through a waitlist mechanism and prioritizes members based on a computed score derived from residency duration and contribution points. Rental allocation is influenced by multiple factors, including plot type, soil quality, member type, and membership tier. The system calculates rental costs dynamically based on these factors. Additionally, members may opt into an auto-renewal feature, which enables their continued participation in future rental seasons and improves their priority for retaining plots in subsequent allocations.
+
+
+
+
+
+The system manages a shared community ecosystem where members can access both a tool library and a seed bank alongside their allocated garden plots. The tool library handles reservations through a priority-based waitlist, ensuring fair access to high-demand equipment during peak usage periods. When a member attempts to book a tool that is unavailable or already reserved, their request is queued and later processed based on a computed priority score that reflects community contribution and system-defined fairness rules. Tools follow a lifecycle state machine that transitions through stages such as available, checked out, in repair, and decommissioned, with automated triggers for maintenance based on accumulated usage hours or reported damage.
+
+The system enforces accountability through a penalty workflow that is triggered when tools are returned late, not cleaned, or reported damaged. Depending on severity, penalties may result in service obligations (volunteer tasks) or fines, temporarily restricting a member’s ability to book additional resources until resolved. High-demand tools are allocated using a conflict-resolution mechanism that evaluates waitlisted users, skips those with pending penalties, and assigns the tool to the highest-priority eligible member.
+
+
+
+
+
+
+
+
+

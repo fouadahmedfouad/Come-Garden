@@ -1,8 +1,14 @@
+from datetime import datetime, timedelta
+
 from rental import Rental 
 from plot import Plot
 from member import Member
 from environment import TimeProvider, Season
-from datetime import datetime, timedelta
+
+from toolLib import ToolLibrary
+from seedBank import SeedBank
+from tasks    import VolunteerSystem 
+from market   import Marketplace
 
 from config import  PLOTS, PLOT_PRICING, SOIL_PRICE_MODIFIER, MEMBERSHIP_DISCOUNT, SUN_SCHEDULE
 
@@ -14,15 +20,21 @@ class Garden():
         self.allotment_height = height
         self.road = road 
         
+        self.members = {}
         self.seasons = ()
+        
         self.current_season = None
         self.time_provider = TimeProvider()
-        self.members = {}
 
        
         self.plots = {}
         self.plots_by_type = {"large":[],"small":[] }
-        
+      
+        self.tool_library = ToolLibrary()
+        self.seed_bank = SeedBank()
+        self.volunteer_system = VolunteerSystem()
+        self.market_place = Marketplace()
+      
         self.errno = 0
 
     @staticmethod
@@ -64,7 +76,7 @@ class Garden():
     def assign_sun_profile(self, plot, alt_w):
         x, _ = plot.center
     
-        # normalize + clamp
+        # normalize + clamp [0,1]
         nx = (x + alt_w / 2) / alt_w
         nx = max(0, min(nx, 1))
     
@@ -369,12 +381,10 @@ class Garden():
         today = self.time_provider.now()
 
         for plot in self.plots.values():
-    
             rental = plot.rental
-            
             if not rental or rental.status != "Active":
                 continue
-    
+
             if today >= rental.end_date:
                 print(f"Today is the day for ending plot {plot.id} rental")
                 self.renew_rental(plot, rental)
@@ -399,8 +409,8 @@ class Garden():
                             p.status = "ExpiringSoon" # check your credits for renewal
                         else:
                             p.status = "PendingTermination" 
-            
-    ## then we may audit to rebuild seasons for new season
+           
+    ## TODO: then add audit to rebuild seasons for new season
     def build(self):
         year = self.time_provider.now().year
 
@@ -411,4 +421,165 @@ class Garden():
 
         self.update_current_season()
         self.plot_maker()
+
         return self
+
+    ## Tools and Bank
+
+         
+
+
+
+garden = Garden(100,50).build()
+
+Fouad_id = garden.join_member("Fouad Ahmed Fouad")
+Mina_id = garden.join_member("Mina")
+David_id = garden.join_member("David")
+Ria_id = garden.join_member("Ria")
+Saged_id = garden.join_member("Saged")
+Steven_id = garden.join_member("Steven")
+
+Fouad = garden.members.get(Fouad_id)
+Mina = garden.members.get(Mina_id)
+
+### TOOLS
+
+# garden.tool_library.add_tool("Rototiller", usage_status="high", maintenance_threshold_hours=5)
+# booking_id = garden.tool_library.book_tool("Rototiller", member_id, 5)
+# member.booking_ids.append(booking_id)
+
+# print(garden.tool_library.bookings[0].status)
+
+# garden.tool_library.return_tool(booking_id, True)
+# garden.tool_library.report_damage(booking_id,"medium")
+
+# ## Resolve penality
+
+# print(garden.tool_library.bookings[0].status)
+
+
+
+## Bank
+
+batchInfo = garden.seed_bank.create_batchInfo(90,5,"Roma",True)
+batch = garden.seed_bank.create_batch("Tomato", 10, batchInfo)
+
+garden.seed_bank.deposit(Fouad_id ,batch)
+# print(garden.seed_bank.member_balances[Fouad_id])
+
+# withdrawed = garden.seed_bank.withdraw(member_id, "Tomato", 4)
+# member.inventory.append(withdrawed)
+# print(member.inventory)
+
+## Remove expired, reorder inventory.
+
+
+
+### Volunteer
+
+# ## Creating Shifts and Tasks  (Admin stuff)
+# shift = garden.volunteer_system.create_shift(datetime.now())
+# task  = garden.volunteer_system.create_task("Turn Compost", 9, "heavy")
+# shift.add_task(task)
+# garden.volunteer_system.add_shift(shift)
+
+# members_ids = [Fouad_id, Mina_id]
+# garden.volunteer_system.assign_members_to_shift(shift,members_ids)
+# weather = "heavy_rain"
+# #print(shift.date)
+# shift = garden.volunteer_system.check_weather(shift,weather)
+# #print(shift.date)
+
+
+# ## monthly update ledgers 
+# garden.volunteer_system.update_ledger(member_id=Fouad_id)
+# garden.volunteer_system.update_ledger(member_id=Mina_id)
+
+# #print(garden.volunteer_system.ledger)
+
+# ## member sibstitution
+
+# ## Fouad Request
+# swap = garden.volunteer_system.request_swap(Fouad_id,Mina_id,shift.shift_id)
+
+# print(swap.status)
+
+# ## Mina Approve
+# garden.volunteer_system.approve_swap(swap.request_id)
+
+# for a in shift.assignments:
+#     print(vars(a))
+
+# print(swap.status)
+
+
+
+# garden.volunteer_system.complete_shift(shift)
+
+
+
+
+# ### MarketPlace
+# listing = garden.market_place.create_listing(Fouad_id,"tomato",10,"normal","potato")
+# gift = garden.market_place.create_listing(Fouad_id,"tomato",10,"gift")
+# flash = garden.market_place.create_listing(Fouad_id,"tomato",5,"flash")
+
+# trade = garden.market_place.request_trade(listing.id, Mina_id)
+# trade2 = garden.market_place.request_trade(gift.id, Mina_id)
+# trade3 = garden.market_place.request_trade(flash.id, Mina.id)
+
+# garden.market_place.complete_trade(trade,Fouad_id)
+# garden.market_place.complete_trade(trade2,Fouad_id)
+# garden.market_place.complete_trade(trade3,Fouad_id)
+
+# garden.market_place.rate_user(Mina_id,Fouad_id,100,"The Tomatos are delicious")
+
+
+
+# q = garden.market_place.ask_question(Fouad_id,"How to plant tomato",2)
+# garden.seed_bank.member_balances[Fouad_id] -= 2
+
+# a = garden.market_place.answer_question(q.id,Mina_id,"I have no idea")
+# garden.market_place.accept_answer(q.id,a.id)
+
+
+
+# print(garden.seed_bank.member_balances[Fouad_id])
+
+
+
+# maybe we can increase contricution points based on the karam
+
+# print(q.status)
+# print(a.accepted)
+# print(garden.market_place.ratings)
+# print(garden.market_place.member_karam)
+
+
+
+
+
+
+
+
+
+
+
+# i = 0
+# for plot in garden.plots.values():
+#         print("plot.id:", plot.id)
+#         print("plot.size:", plot.size)
+#         print("plot.center:", plot.center)
+#         print("plot.height:", plot.height)
+#         print("plot.width:", plot.width)
+#         print("plot.area:", plot.area)
+#         print("plot.status:", plot.status)
+#         print("plot.boundary:", plot.boundary)
+#         print("plot.status:", plot.status)
+#         print("plot.zone:", plot.zone)
+#         print("plot.sun_profile:", plot.sun_profile)
+#         print("plot.soil:", plot.soil_quality)
+#         i += 1
+#         if (i >= 1):
+#             break
+
