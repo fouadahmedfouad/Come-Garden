@@ -17,6 +17,8 @@ class Plot:
 
     # --- Rental / Ownership ---
     waitlist: list
+    season_waitlist:list
+
     rental: Rental
   
 
@@ -64,6 +66,7 @@ class Plot:
  
         self.rental = None
         self.waitlist = []
+        self.season_waitlist = []
       
         self.sun_profile = None
 
@@ -93,3 +96,8 @@ class Plot:
         else:
             self.sunlight_level = "low"
 
+    def add_to_season_list(self,record):
+        if record not in self.season_waitlist:
+            self.season_waitlist.append(record)
+            return True
+        return False

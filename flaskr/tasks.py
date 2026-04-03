@@ -98,8 +98,31 @@ class VolunteerSystem:
     def update_ledger(self, member_id, required_hours=10):
         self.ledger.update_user(member_id, required_hours)
 
-    def assign_members_to_shift(self, shift, member_ids):
-    
+    def add_task_to_shift(self, task, shift_id):
+        found_shift = None
+        for shift in self.shifts:
+            if shift.shift_id == shift_id:
+                found_shift = shift
+
+        if found_shift:
+            found_shift.add_task(task)
+            return True
+
+        return False
+
+    def assign_members_to_shift(self, shift_id, member_ids):
+        found_shift = None
+
+        for shift in self.shifts:
+            if shift.shift_id == shift_id:
+                found_shift = shift
+                break
+
+        if not found_shift:
+            return  
+
+        shift = found_shift
+
         for mid in member_ids:
             if mid not in self.member_contribution:
                 self.add_member(mid)
@@ -161,14 +184,22 @@ class VolunteerSystem:
 
         return history
 
-    def check_weather(self, shift, weather):
+    def check_weather(self, shift_id, weather):
+        found_shift = None
+        for shift in self.shifts:
+            if shift.shift_id == shift_id:
+                found_shift = shift
+                break
+        if not found_shift:
+            return
+
+        shift = found_shift
         if weather in ["heavy_rain", "extreme_heat"]:
             shift.status = "reschduled"
 
             shift.date = shift.date + timedelta(days=1) 
-            return shift   
+            return 
 
-        return shift 
  
     def request_swap(self, requester_id, target_id, shift_id):    
         shift = next((s for s in self.shifts if s.shift_id == shift_id), None)
@@ -215,13 +246,18 @@ class VolunteerSystem:
         swap.status = "rejected"
         return True
     
-    def create_task(self, task_name,difficulty_score, category):
-        return Task(task_name, difficulty_score, category)
-    def create_shift(self, date):
-        return Shift(date)
-    def add_shift(self, shift):
-        self.shifts.append(shift)
+    def add_task(self, shift_id, task_name,difficulty_score, category):
+        task = Task(task_name, difficulty_score, category)
+        for shift in self.shifts:
+            if shift.shift_id == shift_id:
+                shift.tasks.append(task)
+                return True
+        return False
 
+    def create_shift(self, date):
+        shift = Shift(date)
+        self.shifts.append(shift)
+        return shift
 
 # TEST SCENARIO
 if __name__ == "__main__":

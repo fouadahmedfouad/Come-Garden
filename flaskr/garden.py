@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 from rental import Rental 
 from plot import Plot
-from member import Member
+from member import Member, Admin
 from environment import TimeProvider, Season
 
 from toolLib import ToolLibrary
@@ -231,8 +231,10 @@ class Garden():
         member_id = len(self.members)
         member = Member(member_id,memberFullName)
         self.members[member.id] = member
+
+        ## TODO:ADD member to voulnteer system ledger
         
-        return member.id
+        return member
     
     def get_member_tier_factor(self,member):
         count = len(member.rental_history)
@@ -266,20 +268,12 @@ class Garden():
         
         return total_days    
 
-    def apply(self,plot_id,member_id,share=1.0): 
-        plot = self.plots.get(plot_id)
-        member = self.members.get(member_id)
-        member_residency_duration = self.calculate_residency_duration(member_id)
-
-        if member and plot:
-            score = member_residency_duration*2 + member.contribution_points
-            plot.waitlist.append((score,share,member_id))
-
     def add_participant_to_rental(self, rental, member, share, cost, auto_renew=False):
         try:
             rental._add_participant(member, share, cost, self.current_season, auto_renew)
             return True
-        except ValueError:
+        except ValueError as e:
+            print("Error:", e)
             return False
 
     ## duration is one season for all plots
@@ -330,11 +324,14 @@ class Garden():
         if not plot:
             return -2
 
+        ## Note that the member_id is the factor after score and share 
         plot.waitlist.sort(reverse=True)
 
         for record in plot.waitlist:
             _,share,member_id = record
-            self._rent_plot(plot.id,member_id,share) 
+
+            if not self._rent_plot(plot.id, member_id, share):
+                plot.add_to_season_list(record)
 
         plot.waitlist = []
         return 1 
@@ -385,17 +382,28 @@ class Garden():
             if not rental or rental.status != "Active":
                 continue
 
+            # today = rental.end_date
             if today >= rental.end_date:
                 print(f"Today is the day for ending plot {plot.id} rental")
                 self.renew_rental(plot, rental)
 
+                plot.season_waitlist.sort(reverse=True)
+
+                for record in plot.season_waitlist:
+                    _,share,member_id = record
+                    self._rent_plot(plot.id,member_id,share)
+
+                plot.season_waitlist = []
+
     def audit_rent_plots(self):
-       for plot in self.plots.values():
-            if plot.is_available():
-                self.rent_plot(plot.id)  
+        ## Close before 15 days of the end of the season
+       for plot in self.plots.values():   
+           if self.time_provider.now() < self.current_season.end_date - timedelta(days=15):
+                if plot.is_available():
+                    self.rent_plot(plot.id)  
 
     def audit_rental_alert(self):
-
+        ## Alert before 15 days of the end of the season
         for plot in self.plots.values():  
             if plot.rental:
                 if plot.rental.status != "Active":
@@ -423,139 +431,243 @@ class Garden():
         self.plot_maker()
 
         return self
+   
+    # --- Permission Decorator ---
+    def admin_required(func):
+        def wrapper(self, user, *args, **kwargs):
+            if not isinstance(user, Admin):
+                print("Permission denied")
+                return
+            return func(self, user, *args, **kwargs)
+        return wrapper
+    
 
-    ## Tools and Bank
 
-         
+   
+  ##  -------- Rent ---------
+  
+    def apply(self,plot_id,user,share=1.0): 
+        plot = self.plots.get(plot_id)
+        member_residency_duration = self.calculate_residency_duration(user.id)
 
+        if user and plot:
+            score = member_residency_duration*2 + user.contribution_points
+            plot.waitlist.append((score,share,user.id))
+
+   ## -------- Tools --------
+
+    def book_tool(self, user, tool_name, duration_hours):
+        booking_id = self.tool_library.book_tool(tool_name, user.id, duration_hours)
+        if booking_id:
+            user.booking_ids.append(booking_id)
+    
+    
+    def return_tool(self, user, booking_id, cleaned=True):
+        self.tool_library.return_tool(booking_id, cleaned)
+    
+    
+    def report_damage(self, user, booking_id, severity):
+        self.tool_library.report_damage(booking_id, severity)
+    
+    
+    ## -------- Seed Bank --------
+    
+    def deposit(self, user, seed_type, quantity, viability, origin, gt_flag, age, lah=True):
+        batch_info = self.seed_bank.create_batchInfo(
+            viability, age, gt_flag, origin, lah
+        )
+        batch = self.seed_bank.create_batch(seed_type, quantity, batch_info)
+    
+        self.seed_bank.deposit(user.id, batch)
+    
+    
+    def withdraw(self, user, seed_type, quantity):
+        withdrawn = self.seed_bank.withdraw(user.id, seed_type, quantity)
+        if withdrawn:
+            user.inventory.append(withdrawn)
+    
+    
+    ## -------- Volunteer --------
+    
+    @admin_required
+    def create_shift(self, user, date):
+        shift = self.volunteer_system.create_shift(date)
+        user.shifts_ids.append(shift.shift_id)
+    
+    
+    @admin_required
+    def create_task(self, user, shift_id, name, difficulty, category):
+        self.volunteer_system.add_task(shift_id, name, difficulty, category)
+    
+    
+    @admin_required
+    def assign_members(self, user, shift_id, members_ids):
+        for mid in members_ids:
+            member = self.members.get(mid)
+            member.shifts_ids.append(shift_id)
+
+        self.volunteer_system.assign_members_to_shift(shift_id, members_ids)
+
+    @admin_required      
+    def check_weather(self, user, shift_id,weather):
+        garden.volunteer_system.check_weather(shift_id, weather)
+
+
+    def request_swap(self, user, target_id , shift_id):
+        target = self.members.get(target_id)
+
+        swap = garden.volunteer_system.request_swap(user.id,target_id,shift_id)
+        target.swaps_req_ids.append(swap.request_id)
+
+    def approve_swap(self, user, req_id):
+        garden.volunteer_system.approve_swap(req_id)
+
+        ## remove the req_id from the user
+        user.swaps_req_ids.remove(req_id)
+    
 
 
 garden = Garden(100,50).build()
 
-Fouad_id = garden.join_member("Fouad Ahmed Fouad")
-Mina_id = garden.join_member("Mina")
-David_id = garden.join_member("David")
-Ria_id = garden.join_member("Ria")
-Saged_id = garden.join_member("Saged")
-Steven_id = garden.join_member("Steven")
+admin = Admin(100,"Fouad Ahmed")
+garden.members[100] = admin
 
-Fouad = garden.members.get(Fouad_id)
-Mina = garden.members.get(Mina_id)
-
-### TOOLS
-
-# garden.tool_library.add_tool("Rototiller", usage_status="high", maintenance_threshold_hours=5)
-# booking_id = garden.tool_library.book_tool("Rototiller", member_id, 5)
-# member.booking_ids.append(booking_id)
-
-# print(garden.tool_library.bookings[0].status)
-
-# garden.tool_library.return_tool(booking_id, True)
-# garden.tool_library.report_damage(booking_id,"medium")
-
-# ## Resolve penality
-
-# print(garden.tool_library.bookings[0].status)
+Fouad = garden.join_member("Fouad Ahmed Fouad")
+Mina = garden.join_member("Mina")
+David = garden.join_member("David")
+Ria = garden.join_member("Ria")
+Saged = garden.join_member("Saged")
+Steven = garden.join_member("Steven")
 
 
 
-## Bank
-
-batchInfo = garden.seed_bank.create_batchInfo(90,5,"Roma",True)
-batch = garden.seed_bank.create_batch("Tomato", 10, batchInfo)
-
-garden.seed_bank.deposit(Fouad_id ,batch)
-# print(garden.seed_bank.member_balances[Fouad_id])
-
-# withdrawed = garden.seed_bank.withdraw(member_id, "Tomato", 4)
-# member.inventory.append(withdrawed)
-# print(member.inventory)
-
-## Remove expired, reorder inventory.
 
 
+## Planting
 
-### Volunteer
 
-# ## Creating Shifts and Tasks  (Admin stuff)
-# shift = garden.volunteer_system.create_shift(datetime.now())
-# task  = garden.volunteer_system.create_task("Turn Compost", 9, "heavy")
-# shift.add_task(task)
-# garden.volunteer_system.add_shift(shift)
+## Admin
 
-# members_ids = [Fouad_id, Mina_id]
-# garden.volunteer_system.assign_members_to_shift(shift,members_ids)
-# weather = "heavy_rain"
-# #print(shift.date)
-# shift = garden.volunteer_system.check_weather(shift,weather)
-# #print(shift.date)
+## The system checks plots rentals everyday, the application is satisfied after 24 hours
+## if the plot is available and all requirments are satasifed (eg., enough credits)
+## the plot is rented, Otherwise the member is added to season waitlist that will be proccessed
+## by the end of the season.
+garden.audit_rental_alert()
+garden.audit_rental_end()
+garden.audit_rent_plots()
+
+
+#### Tools
+garden.tool_library.add_tool("Rototiller", usage_status="high", maintenance_threshold_hours=5)
+
+## Resolve penality routine
+
+#### Bank
+
+## Remove expired routine, and reorder inventory
+
+
+#### Volunteer
+
+garden.create_shift(admin, datetime.now())
+garden.create_task(admin, admin.shifts_ids[0],"Turn Compost", 9, "heavy")
+
+weather = "heavy_rain"
+garden.check_weather(admin,admin.shifts_ids[0],weather)
+
+
+members_ids = [Fouad.id, Mina.id]
+garden.assign_members(admin, admin.shifts_ids[0],members_ids)
+
 
 
 # ## monthly update ledgers 
-# garden.volunteer_system.update_ledger(member_id=Fouad_id)
-# garden.volunteer_system.update_ledger(member_id=Mina_id)
+### Audit for updating ledger every month
 
-# #print(garden.volunteer_system.ledger)
-
-# ## member sibstitution
-
-# ## Fouad Request
-# swap = garden.volunteer_system.request_swap(Fouad_id,Mina_id,shift.shift_id)
-
-# print(swap.status)
-
-# ## Mina Approve
-# garden.volunteer_system.approve_swap(swap.request_id)
-
-# for a in shift.assignments:
-#     print(vars(a))
-
-# print(swap.status)
-
-
-
-# garden.volunteer_system.complete_shift(shift)
+# garden.volunteer_system.update_ledger(member_id=Fouad.id)
+# garden.volunteer_system.update_ledger(member_id=Mina.id)
 
 
 
 
-# ### MarketPlace
-# listing = garden.market_place.create_listing(Fouad_id,"tomato",10,"normal","potato")
-# gift = garden.market_place.create_listing(Fouad_id,"tomato",10,"gift")
-# flash = garden.market_place.create_listing(Fouad_id,"tomato",5,"flash")
+# print(garden.volunteer_system.shifts[0].tasks[0].name)
+# print(garden.volunteer_system.shifts[0].assignments)
 
-# trade = garden.market_place.request_trade(listing.id, Mina_id)
-# trade2 = garden.market_place.request_trade(gift.id, Mina_id)
-# trade3 = garden.market_place.request_trade(flash.id, Mina.id)
+## Member
 
-# garden.market_place.complete_trade(trade,Fouad_id)
-# garden.market_place.complete_trade(trade2,Fouad_id)
-# garden.market_place.complete_trade(trade3,Fouad_id)
-
-# garden.market_place.rate_user(Mina_id,Fouad_id,100,"The Tomatos are delicious")
+# Credits
+Fouad.add_credits(200)
 
 
+## Fouad Choose plot0 and apply for rent
+plot0 = garden.plots[1]
+garden.apply(plot0.id, Fouad, share=1)
+garden.apply(plot0.id, Mina, share=1)
 
-# q = garden.market_place.ask_question(Fouad_id,"How to plant tomato",2)
-# garden.seed_bank.member_balances[Fouad_id] -= 2
 
-# a = garden.market_place.answer_question(q.id,Mina_id,"I have no idea")
+### TOOLS
+
+## Fouad books a tool
+garden.book_tool(Steven, "Rototiller", duration_hours=10)
+
+## Fouad returns the tool 
+garden.return_tool(Steven, Steven.booking_ids[0], cleaned=True)
+
+## Fouad report damage
+garden.report_damage(Steven, Steven.booking_ids[0], severity="medium")
+
+
+
+### Bank
+garden.deposit(Steven, "Tomato", quantity=10, viability=90, origin="Roma", gt_flag=True, age=5)
+garden.withdraw(Steven,"Tomato", quantity=5)
+
+
+
+
+
+#### Volunteer
+## Fouad requests a swap
+garden.request_swap(Fouad, Mina.id, Fouad.shifts_ids[0])
+## Mina Approve
+garden.approve_swap(Mina, Mina.swaps_req_ids[0])
+
+
+
+
+
+
+### MarketPlace
+listing = garden.market_place.create_listing(Fouad.id,"tomato",10,"normal","potato")
+trade = garden.market_place.request_trade(listing.id, Mina.id)
+
+
+# garden.market_place.complete_trade(trade,Fouad.id)
+
+# garden.market_place.rate_user(Mina.id,Fouad.id,100,"The Tomatos are delicious")
+
+
+
+# q = garden.market_place.ask_question(Fouad.id,"How to plant tomato",2)
+# garden.seed_bank.member_balances[Fouad.id] -= 2
+
+# a = garden.market_place.answer_question(q.id,Mina.id,"I have no idea")
 # garden.market_place.accept_answer(q.id,a.id)
 
 
 
+
+
 # print(garden.seed_bank.member_balances[Fouad_id])
 
 
 
-# maybe we can increase contricution points based on the karam
+# # maybe we can increase contricution points based on the karam
 
-# print(q.status)
-# print(a.accepted)
-# print(garden.market_place.ratings)
-# print(garden.market_place.member_karam)
-
-
+# # print(q.status)
+# # print(a.accepted)
+# # print(garden.market_place.ratings)
+# # print(garden.market_place.member_karam)
 
 
 
@@ -565,21 +677,47 @@ garden.seed_bank.deposit(Fouad_id ,batch)
 
 
 
-# i = 0
-# for plot in garden.plots.values():
-#         print("plot.id:", plot.id)
-#         print("plot.size:", plot.size)
-#         print("plot.center:", plot.center)
-#         print("plot.height:", plot.height)
-#         print("plot.width:", plot.width)
-#         print("plot.area:", plot.area)
-#         print("plot.status:", plot.status)
-#         print("plot.boundary:", plot.boundary)
-#         print("plot.status:", plot.status)
-#         print("plot.zone:", plot.zone)
-#         print("plot.sun_profile:", plot.sun_profile)
-#         print("plot.soil:", plot.soil_quality)
-#         i += 1
-#         if (i >= 1):
-#             break
+
+
+# # i = 0
+# # for plot in garden.plots.values():
+# #         print("plot.id:", plot.id)
+# #         print("plot.size:", plot.size)
+# #         print("plot.center:", plot.center)
+# #         print("plot.height:", plot.height)
+# #         print("plot.width:", plot.width)
+# #         print("plot.area:", plot.area)
+# #         print("plot.status:", plot.status)
+# #         print("plot.boundary:", plot.boundary)
+# #         print("plot.status:", plot.status)
+# #         print("plot.zone:", plot.zone)
+# #         print("plot.sun_profile:", plot.sun_profile)
+# #         print("plot.soil:", plot.soil_quality)
+# #         i += 1
+# #         if (i >= 1):
+# #             break
+
+
+
+
+
+
+# print(Mina.swaps_req_ids)
+# print(swap.status)
+
+
+
+# # garden.volunteer_system.complete_shift(shift)
+# print(Steven.inventory)
+# print(garden.seed_bank.member_balances[Steven.id])
+# print(garden.seed_bank.seeds)
+
+
+# print(garden.tool_library.bookings[0].status)
+# print(garden.tool_library.tools.get("Rototiller").status)
+
+
+# #print(garden.volunteer_system.ledger)
+
+
 

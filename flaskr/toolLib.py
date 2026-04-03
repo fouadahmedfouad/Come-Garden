@@ -121,7 +121,7 @@ class ToolLibrary:
 
         # Otherwise 
         score = self.calculate_priority(user_id)
-        tool.waitlist.append((score, user_id, duration_hours))
+        tool.waitlist.append((score, duration_hours, user_id))
 
         return None
 
@@ -186,12 +186,9 @@ class ToolLibrary:
     
     def calculate_priority(self, user_id):
         # Example:
-        # Could include:
-        # - contribution points
-        # - past tool usage
-        return 100  # placeholder
+        # penailties for example
+       return 100  # placeholder
 
-    ## TODO: Resolve penality
     def has_pending_penalty(self, user_id):
         return any(p.user_id == user_id and p.status == "pending" for p in self.penalties)
     
@@ -203,7 +200,7 @@ class ToolLibrary:
     
         tool.waitlist.sort(reverse=True)
     
-        for i, (_, user_id, duration) in enumerate(tool.waitlist):
+        for i, (_,  duration, user_id) in enumerate(tool.waitlist):
     
             if self.has_pending_penalty(user_id):
                 continue
@@ -218,9 +215,6 @@ class ToolLibrary:
             tool.waitlist.pop(i)
             break
         
-
-
-
 
 
 

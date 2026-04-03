@@ -138,8 +138,8 @@ class SeedBank:
         print("\n Inventory:", self.inventory_items)
         print("\n Transactions:", self.transactions)
 
-    def create_batchInfo(self, viability, age, parent_plant, lah=True):
-        info = SeedInfo(viability, age, parent_plant, lah)
+    def create_batchInfo(self, viability, age, gt_flag, parent_plant, lah=True):
+        info = SeedInfo(viability, age, gt_flag, parent_plant, lah)
         return info
 
     def create_batch(self, seed_type, quantity, info: SeedInfo):
@@ -148,7 +148,7 @@ class SeedBank:
         return batch
 
 
-# -----------------------------
+# # -----------------------------
 # # TEST SCENARIO
 # # -----------------------------
 # if __name__ == "__main__":
