@@ -457,9 +457,9 @@ class Garden():
    ## -------- Tools --------
 
     def book_tool(self, user, tool_name, duration_hours):
-        booking_id = self.tool_library.book_tool(tool_name, user.id, duration_hours)
-        if booking_id:
-            user.booking_ids.append(booking_id)
+        booking = self.tool_library.book_tool(tool_name, user.id, duration_hours)
+        if booking:
+            user.booking_ids.append(booking.id)
     
     
     def return_tool(self, user, booking_id, cleaned=True):
@@ -524,8 +524,30 @@ class Garden():
 
         ## remove the req_id from the user
         user.swaps_req_ids.remove(req_id)
-    
 
+
+    # ------- Market Place --------
+    def create_listing(self,user, item, quantity, listing_type, request=None):
+        listing = garden.market_place.create_listing(user.id, item, quantity, listing_type, request)
+        if listing:
+            user.listings_ids.append(listing.id) 
+
+    def trade(self, user, listing_id):
+        garden.market_place.request_trade(listing_id, user.id)
+
+    def complete_trade(self, user, trade_id):
+        garden.market_place.complete_trade(trade_id, user.id)
+
+    def get_listings(self, user):
+        return garden.market_place.get_listings()
+    
+    def get_my_trades(self, user):
+        return garden.market_place.get_my_trades(user.id)
+ 
+    def get_trades_by_listing(self, user, listing_id):
+        return garden.market_place.get_trades_by_listing(listing_id)
+
+  
 
 garden = Garden(100,50).build()
 
@@ -634,15 +656,39 @@ garden.approve_swap(Mina, Mina.swaps_req_ids[0])
 
 
 
-
-
-
 ### MarketPlace
-listing = garden.market_place.create_listing(Fouad.id,"tomato",10,"normal","potato")
-trade = garden.market_place.request_trade(listing.id, Mina.id)
+
+garden.create_listing(Fouad,"tomato",10,"normal","potato")
+## Mina view trades
+listings = garden.get_listings(Mina)
+## Mina trades
+garden.trade(Mina, listings[0].id)
 
 
-# garden.market_place.complete_trade(trade,Fouad.id)
+# Fouad view his listing's trades
+listing_trades = garden.get_trades_by_listing(Fouad, Fouad.listings_ids[0])
+
+# Fouad accept trade
+garden.complete_trade(Fouad, listing_trades[0].id)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# print(listing_trades)
+# print(listing_trades[0].status)
+# print(garden.get_my_trades(Mina)[0].status)
+
 
 # garden.market_place.rate_user(Mina.id,Fouad.id,100,"The Tomatos are delicious")
 
@@ -668,16 +714,6 @@ trade = garden.market_place.request_trade(listing.id, Mina.id)
 # # print(a.accepted)
 # # print(garden.market_place.ratings)
 # # print(garden.market_place.member_karam)
-
-
-
-
-
-
-
-
-
-
 
 # # i = 0
 # # for plot in garden.plots.values():

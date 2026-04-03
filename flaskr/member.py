@@ -15,6 +15,7 @@ class Member:
 
         self.shifts_ids = []
         self.swaps_req_ids = []
+        self.listings_ids = []
 
     def add_rental(self,rental):
         self.rental_history.append(rental)

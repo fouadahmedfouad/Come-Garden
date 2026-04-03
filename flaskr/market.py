@@ -20,7 +20,7 @@ class Listing:
 
         if listing_type == "flash":
             self.expires_at = self.created_at + timedelta(hours=duration_hours)
-
+        
         self.status = "active"
         self.flags = []  # allergy flags
 
@@ -94,7 +94,7 @@ class Marketplace:
             listing.flags.append(allergens[listing.item.lower()])
 
     # Trade
-    def request_trade(self, listing_id, buyer_id):
+    def request_trade(self, listing_id, buyer_id): 
         listing = self.listings.get(listing_id)
 
         if not listing or listing.status != "active":
@@ -104,12 +104,23 @@ class Marketplace:
             listing.status = "expired"
             return None
 
-        trade = Trade(listing_id, buyer_id)
+        trade = Trade(listing.id, buyer_id)
         self.trades.append(trade)
+
         return trade
 
-    def complete_trade(self, trade, owner_id):
-        listing = self.listings[trade.listing_id]
+    def complete_trade(self, trade_id, owner_id):
+        found_trade = None
+        for trade in self.trades:
+            if trade.id == trade_id:
+                found_trade = trade
+        if not found_trade:
+            return 
+
+        trade = found_trade
+        listing = self.listings[found_trade.listing_id]
+        
+
         trade.status = "completed"
         listing.status = "completed"
 
@@ -154,6 +165,37 @@ class Marketplace:
         
         return True
 
+
+    def get_listings(self):
+        return list(self.listings.values())
+
+    def get_trades_by_listing(self, listing_id): 
+        trades = []
+        for trade in self.trades:
+            if trade.listing_id == listing_id:
+                trades.append(trade)
+        return trades
+
+    def get_my_trades(self, owner_id):
+        trades = []
+        for trade in self.trades:
+            if trade.buyer_id == owner_id:
+                trades.append(trade)
+        return trades
+
+    # def get_listings(self, status=None, listing_type=None, item=None):
+    #     results = self.listings.values()
+    
+    #     if status:
+    #         results = filter(lambda l: l.status == status, results)
+    
+    #     if listing_type:
+    #         results = filter(lambda l: l.type == listing_type, results)
+    
+    #     if item:
+    #         results = filter(lambda l: l.item.lower() == item.lower(), results)
+    
+    #     return list(results)
 
 #     # Surplus Prediction
 # def predict_surplus(plot):

@@ -103,7 +103,7 @@ class ToolLibrary:
         booking = Booking(tool_name, user_id, start_time, end_time)
         self.bookings.append(booking)
         tool.check_out()
-        return booking.id
+        return booking
  
     def book_tool(self, tool_name, user_id, duration_hours):
         tool = self.tools.get(tool_name)
