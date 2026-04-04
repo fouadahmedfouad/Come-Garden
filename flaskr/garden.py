@@ -216,12 +216,53 @@ class Garden():
                 self.add_plot(plot,"small")
                 plot_id += 1
 
+        self.assign_neighbors()
+
         self.totalLargePlots = len(large_pts)
         self.totalSmallPlots = len(small_pts)
         self.totalPlots = len(large_pts) + len(small_pts)
 
         self.large_pts = large_pts
         self.small_pts = small_pts
+    
+
+    def assign_neighbors(self):
+        plots = list(self.plots.values())
+    
+        for p1 in plots:
+            p1.neighbors = []
+            for p2 in plots:
+                if p1.id == p2.id:
+                    continue
+
+                if self.are_neighbors(p1, p2):
+                    p1.neighbors.append(p2.id)
+
+    def are_neighbors(self, p1, p2, tol=2.5, debug=False):
+        dx = abs(p1.center[0] - p2.center[0])
+        dy = abs(p1.center[1] - p2.center[1])
+    
+        max_dx = (p1.width + p2.width) / 2
+        max_dy = (p1.height + p2.height) / 2
+    
+        # Allow small gaps / imperfections using tolerance
+        horizontal = abs(dx - max_dx) <= tol and dy <= max_dy + tol
+        vertical   = abs(dy - max_dy) <= tol and dx <= max_dx + tol
+    
+        result = horizontal or vertical
+    
+        if debug:
+            print(f"""
+    --- CHECKING PLOTS {p1.id} & {p2.id} ---
+    centers: {p1.center} vs {p2.center}
+    dx={dx}, max_dx={max_dx}, diff={abs(dx - max_dx)}
+    dy={dy}, max_dy={max_dy}, diff={abs(dy - max_dy)}
+    tol={tol}
+    horizontal={horizontal}, vertical={vertical}
+    RESULT={result}
+    """)
+    
+        return result    
 
     def join_member(self,memberFullName):
         for member in self.members.values():
@@ -277,6 +318,7 @@ class Garden():
             return False
 
     ## duration is one season for all plots
+    ## TODO: The state of rents and error handling
     def _rent_plot(self, plot_id, member_id, share=1.0):
         plot = self.plots.get(plot_id)
         plot_cost = PLOT_PRICING[plot.size]
@@ -288,16 +330,26 @@ class Garden():
         if not member:
             # "Member doesn't exist"
             self.errno  = -3
+            print("member doesn't exist")
             return None
 
 
         if not plot:
             # "Plot doesn't exist"
             self.errno  = -4
+            print("Plot doesn't exist")
+            return None
+        if share not in [0.5,1]:
+            print("Share should be half or full")
             return None
 
         cost = self.calculate_rent(plot.id, member.id)
  
+        if member.credits < cost:
+            print("Not enough credits")
+            return None
+
+
         if plot.rental is None:
             plot.rental = Rental(plot, plot_cost, current_season)
        
@@ -306,6 +358,7 @@ class Garden():
         if not plot.is_available():
             # "Plot already rented"
             self.errno  = -1
+            print("plot already rented")
             return None 
         
         added = self.add_participant_to_rental(rental, member, share, cost)
@@ -313,6 +366,7 @@ class Garden():
         if not added:
             #  str(e)
             self.errno  = -2
+            print("Rental system error")
             return None 
 
         # print(f"{member.name} rented {share*100:.0f}% of plot {plot_id}")
@@ -322,6 +376,7 @@ class Garden():
         plot = self.plots.get(plot_id)
         
         if not plot:
+            print("Plot doesn't exist")
             return -2
 
         ## Note that the member_id is the factor after score and share 
@@ -329,7 +384,6 @@ class Garden():
 
         for record in plot.waitlist:
             _,share,member_id = record
-
             if not self._rent_plot(plot.id, member_id, share):
                 plot.add_to_season_list(record)
 
@@ -397,7 +451,7 @@ class Garden():
 
     def audit_rent_plots(self):
         ## Close before 15 days of the end of the season
-       for plot in self.plots.values():   
+       for plot in self.plots.values():  
            if self.time_provider.now() < self.current_season.end_date - timedelta(days=15):
                 if plot.is_available():
                     self.rent_plot(plot.id)  
@@ -446,7 +500,7 @@ class Garden():
    
   ##  -------- Rent ---------
   
-    def apply(self,plot_id,user,share=1.0): 
+    def apply(self,user,plot_id,share=1.0): 
         plot = self.plots.get(plot_id)
         member_residency_duration = self.calculate_residency_duration(user.id)
 
@@ -563,8 +617,7 @@ class Garden():
     
     def get_answers_by_question(self, user, question_id):
         return garden.market_place.get_answers_by_question(Fouad.questions_ids[0])
-
-    
+ 
     def accept_answer(self, user, question_id, answer_id):
         answer = garden.market_place.accept_answer(question_id,answer_id)
         responder = self.members[answer.responder_id]
@@ -572,144 +625,307 @@ class Garden():
         responder.credits += q.bounty
 
 
+    def alert_neighbors(self, plot_id):
+        plot = self.plots[plot_id]
+
+        if plot.infection_status != "infected":
+            return []
+
+        alerts = []
+
+        for neighbor_id in plot.neighbors:
+            neighbor = self.plots.get(neighbor_id)
+
+            if neighbor:
+                owners = neighbor.get_owners()
+                alerts.append({
+                    "plot": neighbor_id,
+                    "owners": owners,
+                    "message": f"Warning: Nearby infection ({plot.infection_type})"
+                })
+
+        return alerts
+
+    def seasonal_update(self):
+        for plot in self.plots.values():
+            plot.generate_winter_tasks()
+
+    def propagate_infections(self):
+        all_alerts = []
+        for plot_id in self.plots:
+            alerts = self.alert_neighbors(plot_id)
+            all_alerts.extend(alerts)
+        return all_alerts
         ## credits
 
 
-
-    # def answer_question(self, user, question_id, content):
-
+    def add_credits(self, user, amount):
+        user.add_credits(amount)
      
+    def add_crop(self, user, plot_id, crop_name):
+        plot = garden.plots.get(plot_id)
 
+        ## constraint same plot same crop at a time.
+        if plot.current_crop_type and plot.current_crop_type != crop_name:
+            raise Exception("Conflict")
+
+        if user.name in plot.get_owners():
+            plot.add_crop(user.name,crop_name)
+
+    def add_fertilizer(self, user, plot_id, fertilizer_name):
+        plot = garden.plots.get(plot_id)
+        plot.add_fertilizer(user, fertilizer_name)
+
+    def update_current_crop(self, user, plot_id, crop_name):
+        plot = garden.plots.get(plot_id)
+        plot.current_crop_type = crop_name
+    
+    def generate_watering_schedule(self, user, plot_id):
+        plot = garden.plots.get(plot_id)
+        schedule = plot.generate_watering_schedule()
+
+        return schedule
+
+# TODO: Moving all these other stuff into Services
+        
 garden = Garden(100,50).build()
+# garden.cad_render()
 
-admin = Admin(100,"Fouad Ahmed")
-garden.members[100] = admin
+# admin = Admin(100,"Fouad Ahmed")
+# garden.members[100] = admin
 
-Fouad = garden.join_member("Fouad Ahmed Fouad")
-Mina = garden.join_member("Mina")
-David = garden.join_member("David")
-Ria = garden.join_member("Ria")
-Saged = garden.join_member("Saged")
-Steven = garden.join_member("Steven")
-
-
-
+# Fouad = garden.join_member("Fouad Ahmed Fouad")
+# Mina = garden.join_member("Mina")
+# David = garden.join_member("David")
+# Ria = garden.join_member("Ria")
+# Saged = garden.join_member("Saged")
+# Steven = garden.join_member("Steven")
 
 
-## Planting
 
 
-## Admin
 
-## The system checks plots rentals everyday, the application is satisfied after 24 hours
-## if the plot is available and all requirments are satasifed (eg., enough credits)
-## the plot is rented, Otherwise the member is added to season waitlist that will be proccessed
-## by the end of the season.
+# ## Planting
+
+# --- Setup Garden ---
+
+# pick some plots
+plot1 = garden.plots[1]
+plot2 = garden.plots[2]
+plot3 = garden.plots[3]
+
+# manually define neighbors (if not already set)
+plot1.neighbors = plot1.neighbors
+plot2.neighbors = plot2.neighbors
+plot3.neighbors = plot3.neighbors
+
+
+
+
+# --- Create Members ---
+alice = garden.join_member("Alice")
+bob = garden.join_member("Bob")
+charlie = garden.join_member("Charlie")
+
+garden.add_credits(alice,200)
+garden.add_credits(bob,200)
+garden.add_credits(charlie,200)
+
+garden.apply(alice, plot1.id, 0.5)
+garden.apply(bob, plot1.id, 0.5)
+garden.apply(charlie, plot2.id, 1)
+
+
 garden.audit_rental_alert()
 garden.audit_rental_end()
 garden.audit_rent_plots()
 
 
-#### Tools
-garden.tool_library.add_tool("Rototiller", usage_status="high", maintenance_threshold_hours=5)
 
-## Resolve penality routine
+print("\n--- Soil State Test ---")
 
-#### Bank
+garden.add_crop(alice, plot1.id, "carrot")
+garden.add_crop(bob, plot1.id, "carrot")
+garden.add_crop(alice, plot1.id, "carrot")
 
-## Remove expired routine, and reorder inventory
+print("Soil state (expect depleted):", plot1.soil_state)
 
+garden.add_fertilizer(bob, plot1.id,"organic")
 
-#### Volunteer
-
-garden.create_shift(admin, datetime.now())
-garden.create_task(admin, admin.shifts_ids[0],"Turn Compost", 9, "heavy")
-
-weather = "heavy_rain"
-garden.check_weather(admin,admin.shifts_ids[0],weather)
+print("Soil state (expect recovering):", plot1.soil_state)
 
 
-members_ids = [Fouad.id, Mina.id]
-garden.assign_members(admin, admin.shifts_ids[0],members_ids)
+# =========================================================
+# 💧 2. IRRIGATION TEST
+# =========================================================
 
-### Audit for updating ledger every month
+print("\n--- Irrigation Test ---")
 
+garden.update_current_crop(alice,plot1.id,"tomato")
+schedule = garden.generate_watering_schedule(alice, plot1.id)
 
-## Member
-
-# Credits
-Fouad.add_credits(200)
-
-
-
-## Fouad Choose plot0 and apply for rent
-plot0 = garden.plots[1]
-garden.apply(plot0.id, Fouad, share=1)
-garden.apply(plot0.id, Mina, share=1)
+print("Watering schedule:", schedule)
 
 
-### TOOLS
+# =========================================================
+# 🐛 3. INFECTION + PROPAGATION TEST
+# =========================================================
 
-## Fouad books a tool
-garden.book_tool(Steven, "Rototiller", duration_hours=10)
+print("\n--- Infection Propagation Test ---")
 
-## Fouad returns the tool 
-garden.return_tool(Steven, Steven.booking_ids[0], cleaned=True)
+plot1.report_infection("potato_blight", datetime.now())
 
-## Fouad report damage
-garden.report_damage(Steven, Steven.booking_ids[0], severity="medium")
+alerts = garden.propagate_infections()
 
-
-
-### Bank
-garden.deposit(Steven, "Tomato", quantity=10, viability=90, origin="Roma", gt_flag=True, age=5)
-garden.withdraw(Steven,"Tomato", quantity=5)
+for alert in alerts:
+    print(alert)
 
 
+# =========================================================
+# ❄️ 4. SEASONAL TASKS TEST
+# =========================================================
+
+print("\n--- Seasonal Tasks Test ---")
+
+# force conditions
+plot1.soil_state = "depleted"
+plot1.ph_level = 5
+
+garden.seasonal_update()
+
+print("Plot1 tasks:", plot1.tasks)
+
+
+# =========================================================
+# 👥 5. MULTI-USER ACTIVITY LOG TEST
+# =========================================================
+
+print("\n--- Activity Log ---")
+
+for act in plot1.activities:
+    print(act)
+
+
+# =========================================================
+# 🔍 6. OWNERS TEST
+# =========================================================
+
+print("\n--- Owners Test ---")
+
+print("Plot1 owners:", plot1.get_owners())
+print("Plot2 owners:", plot2.get_owners())
+
+# ## Admin
+
+# ## The system checks plots rentals everyday, the application is satisfied after 24 hours
+# ## if the plot is available and all requirments are satasifed (eg., enough credits)
+# ## the plot is rented, Otherwise the member is added to season waitlist that will be proccessed
+# ## by the end of the season.
+# garden.audit_rental_alert()
+# garden.audit_rental_end()
+# garden.audit_rent_plots()
+
+
+# #### Tools
+# garden.tool_library.add_tool("Rototiller", usage_status="high", maintenance_threshold_hours=5)
+
+# ## Resolve penality routine
+
+# #### Bank
+
+# ## Remove expired routine, and reorder inventory
+
+
+# #### Volunteer
+
+# garden.create_shift(admin, datetime.now())
+# garden.create_task(admin, admin.shifts_ids[0],"Turn Compost", 9, "heavy")
+
+# weather = "heavy_rain"
+# garden.check_weather(admin,admin.shifts_ids[0],weather)
+
+
+# members_ids = [Fouad.id, Mina.id]
+# garden.assign_members(admin, admin.shifts_ids[0],members_ids)
+
+# ### Audit for updating ledger every month
+
+
+# ## Member
+
+# # Credits
+# Fouad.add_credits(200)
 
 
 
-#### Volunteer
-## Fouad requests a swap
-garden.request_swap(Fouad, Mina.id, Fouad.shifts_ids[0])
-## Mina Approve
-garden.approve_swap(Mina, Mina.swaps_req_ids[0])
+# ## Fouad Choose plot0 and apply for rent
+# plot0 = garden.plots[1]
+# garden.apply(Fouad,plot0.id, share=1)
+# garden.apply(Mina, plot0.id, share=1)
+
+
+# ### TOOLS
+
+# ## Fouad books a tool
+# garden.book_tool(Steven, "Rototiller", duration_hours=10)
+
+# ## Fouad returns the tool 
+# garden.return_tool(Steven, Steven.booking_ids[0], cleaned=True)
+
+# ## Fouad report damage
+# garden.report_damage(Steven, Steven.booking_ids[0], severity="medium")
 
 
 
-### MarketPlace
-
-garden.create_listing(Fouad,"tomato",10,"normal","potato")
-q = garden.ask_question(Fouad, "How to avoid over planting", 10)
-
-
-## Mina view trades & questions
-listings = garden.get_listings(Mina)
-questions = garden.get_questions(Mina)
-
-## Mina trades
-garden.trade(Mina, listings[0].id)
-
-## Mina answers questions
-garden.answer_question(Mina,  questions[0].id, "Try to divide your normal estimate by 2, and you will be fine")
-
-# Fouad view his listing's trades
-listing_trades = garden.get_trades_by_listing(Fouad, Fouad.listings_ids[0])
-
-# Fouad view his question's answer
-question_answers = garden.get_answers_by_question(Fouad, Fouad.questions_ids[0])
-
-# Fouad accept trade
-garden.complete_trade(Fouad, listing_trades[0].id)
-
-# Fouad accept answer
-garden.accept_answer(Fouad,Fouad.questions_ids[0],question_answers[0].id)
-
-# print(q.status)
+# ### Bank
+# garden.deposit(Steven, "Tomato", quantity=10, viability=90, origin="Roma", gt_flag=True, age=5)
+# garden.withdraw(Steven,"Tomato", quantity=5)
 
 
-# print(Mina.credits)
-# print(Fouad.credits)
+
+
+
+# #### Volunteer
+# ## Fouad requests a swap
+# garden.request_swap(Fouad, Mina.id, Fouad.shifts_ids[0])
+# ## Mina Approve
+# garden.approve_swap(Mina, Mina.swaps_req_ids[0])
+
+
+
+# ### MarketPlace
+
+# garden.create_listing(Fouad,"tomato",10,"normal","potato")
+# q = garden.ask_question(Fouad, "How to avoid over planting", 10)
+
+
+# ## Mina view trades & questions
+# listings = garden.get_listings(Mina)
+# questions = garden.get_questions(Mina)
+
+# ## Mina trades
+# garden.trade(Mina, listings[0].id)
+
+# ## Mina answers questions
+# garden.answer_question(Mina,  questions[0].id, "Try to divide your normal estimate by 2, and you will be fine")
+
+# # Fouad view his listing's trades
+# listing_trades = garden.get_trades_by_listing(Fouad, Fouad.listings_ids[0])
+
+# # Fouad view his question's answer
+# question_answers = garden.get_answers_by_question(Fouad, Fouad.questions_ids[0])
+
+# # Fouad accept trade
+# garden.complete_trade(Fouad, listing_trades[0].id)
+
+# # Fouad accept answer
+# garden.accept_answer(Fouad,Fouad.questions_ids[0],question_answers[0].id)
+
+# # print(q.status)
+
+
+# # print(Mina.credits)
+# # print(Fouad.credits)
 
 
 

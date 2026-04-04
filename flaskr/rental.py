@@ -35,9 +35,6 @@ class Rental:
 
         cost = calculated_cost
 
-        if member.credits < cost:
-            raise ValueError("Not enough credits")
-
         member.credits -= cost
 
         today = TimeProvider().now()
