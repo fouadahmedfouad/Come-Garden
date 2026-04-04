@@ -123,6 +123,7 @@ class VolunteerSystem:
 
         shift = found_shift
 
+        # TODO: should we remove this and just add the contribution 0 0  not ledger
         for mid in member_ids:
             if mid not in self.member_contribution:
                 self.add_member(mid)

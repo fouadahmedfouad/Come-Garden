@@ -1,0 +1,12 @@
+a classic system boundary and ownership issue. Each subsystem (e.g., marketplace, booking system) should be treated as an independent domain that owns its own data and controls access to it. Instead of sharing internal objects across systems, interactions should happen through identifiers (IDs) and exposed operations.
+
+In this model, objects are not passed around between systems directly. Instead:
+
+The marketplace creates and owns listings.
+It exposes those listings through queries (e.g., browsing/searching).
+Other actors (like users) discover listings via the marketplace.
+Actions (like trading) are performed by sending the listing ID back to the marketplace.
+
+This avoids tight coupling, prevents shared mutable state, and preserves encapsulation. Each subsystem remains responsible for its own invariants, while other parts of the system interact with it through well-defined interfaces.
+
+Your earlier instinct of trying to store or mirror objects across systems introduced coupling, whereas the ID-based interaction model keeps systems loosely coupled and independently maintainable.

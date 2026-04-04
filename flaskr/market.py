@@ -69,11 +69,14 @@ class Answer:
 class Marketplace:
     def __init__(self):
         self.listings = {}
-        self.trades = []
+        self.trades = {}
         self.ratings = []
+
         self.questions = {}
         self.answers = {}
+
         self.member_karam = {}
+        self.member_credits = {}
 
     # Listing
     def create_listing(self, member_id, item, quantity, listing_type="normal", request=None):
@@ -105,20 +108,13 @@ class Marketplace:
             return None
 
         trade = Trade(listing.id, buyer_id)
-        self.trades.append(trade)
+        self.trades[trade.id] = trade
 
         return trade
 
     def complete_trade(self, trade_id, owner_id):
-        found_trade = None
-        for trade in self.trades:
-            if trade.id == trade_id:
-                found_trade = trade
-        if not found_trade:
-            return 
-
-        trade = found_trade
-        listing = self.listings[found_trade.listing_id]
+        trade = self.trades.get(trade_id)
+        listing = self.listings.get(trade.listing_id)
         
 
         trade.status = "completed"
@@ -139,7 +135,7 @@ class Marketplace:
 
         return q
 
-    def answer_question(self, question_id, member_id, content):
+    def answer_question(self, member_id, question_id, content):
         question = self.questions.get(question_id)
 
         if not question or question.status != "open":
@@ -159,11 +155,17 @@ class Marketplace:
         if not question or not answer:
             return False
 
+        # mark answer as accepted
         answer.accepted = True
         question.accepted_answer_id = answer_id
+
+        # # credit the responder
+        # self.member_credits[answer.responder_id] = self.member_credits.get(answer.responder_id,0) + question.bounty
+
+        # mark question as resolved
         question.status = "resolved"
         
-        return True
+        return answer
 
 
     def get_listings(self):
@@ -171,17 +173,27 @@ class Marketplace:
 
     def get_trades_by_listing(self, listing_id): 
         trades = []
-        for trade in self.trades:
+        for trade in self.trades.values():
             if trade.listing_id == listing_id:
                 trades.append(trade)
         return trades
 
     def get_my_trades(self, owner_id):
         trades = []
-        for trade in self.trades:
+        for trade in self.trades.values():
             if trade.buyer_id == owner_id:
                 trades.append(trade)
         return trades
+
+    def get_questions(self):
+        return list(self.questions.values())
+
+    def get_answers_by_question(self, question_id):
+        q = self.questions.get(question_id)
+        result = []
+        for ans_id in q.answers:
+           result.append(self.answers[ans_id]) 
+        return result
 
     # def get_listings(self, status=None, listing_type=None, item=None):
     #     results = self.listings.values()

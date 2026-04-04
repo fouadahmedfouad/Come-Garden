@@ -547,7 +547,38 @@ class Garden():
     def get_trades_by_listing(self, user, listing_id):
         return garden.market_place.get_trades_by_listing(listing_id)
 
-  
+    def ask_question(self, user, content, bounty):
+        q = garden.market_place.ask_question(user.id, content,bounty)
+        if q:
+            user.questions_ids.append(q.id)
+            user.credits -= q.bounty
+
+        return q
+
+    def answer_question(self, user, question_id, content):
+        garden.market_place.answer_question(user.id, question_id, content)
+
+    def get_questions(self, user):
+        return garden.market_place.get_questions()
+    
+    def get_answers_by_question(self, user, question_id):
+        return garden.market_place.get_answers_by_question(Fouad.questions_ids[0])
+
+    
+    def accept_answer(self, user, question_id, answer_id):
+        answer = garden.market_place.accept_answer(question_id,answer_id)
+        responder = self.members[answer.responder_id]
+
+        responder.credits += q.bounty
+
+
+        ## credits
+
+
+
+    # def answer_question(self, user, question_id, content):
+
+     
 
 garden = Garden(100,50).build()
 
@@ -601,24 +632,14 @@ garden.check_weather(admin,admin.shifts_ids[0],weather)
 members_ids = [Fouad.id, Mina.id]
 garden.assign_members(admin, admin.shifts_ids[0],members_ids)
 
-
-
-# ## monthly update ledgers 
 ### Audit for updating ledger every month
 
-# garden.volunteer_system.update_ledger(member_id=Fouad.id)
-# garden.volunteer_system.update_ledger(member_id=Mina.id)
-
-
-
-
-# print(garden.volunteer_system.shifts[0].tasks[0].name)
-# print(garden.volunteer_system.shifts[0].assignments)
 
 ## Member
 
 # Credits
 Fouad.add_credits(200)
+
 
 
 ## Fouad Choose plot0 and apply for rent
@@ -659,101 +680,40 @@ garden.approve_swap(Mina, Mina.swaps_req_ids[0])
 ### MarketPlace
 
 garden.create_listing(Fouad,"tomato",10,"normal","potato")
-## Mina view trades
+q = garden.ask_question(Fouad, "How to avoid over planting", 10)
+
+
+## Mina view trades & questions
 listings = garden.get_listings(Mina)
+questions = garden.get_questions(Mina)
+
 ## Mina trades
 garden.trade(Mina, listings[0].id)
 
+## Mina answers questions
+garden.answer_question(Mina,  questions[0].id, "Try to divide your normal estimate by 2, and you will be fine")
 
 # Fouad view his listing's trades
 listing_trades = garden.get_trades_by_listing(Fouad, Fouad.listings_ids[0])
 
+# Fouad view his question's answer
+question_answers = garden.get_answers_by_question(Fouad, Fouad.questions_ids[0])
+
 # Fouad accept trade
 garden.complete_trade(Fouad, listing_trades[0].id)
 
+# Fouad accept answer
+garden.accept_answer(Fouad,Fouad.questions_ids[0],question_answers[0].id)
+
+# print(q.status)
+
+
+# print(Mina.credits)
+# print(Fouad.credits)
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-# print(listing_trades)
-# print(listing_trades[0].status)
-# print(garden.get_my_trades(Mina)[0].status)
-
-
-# garden.market_place.rate_user(Mina.id,Fouad.id,100,"The Tomatos are delicious")
-
-
-
-# q = garden.market_place.ask_question(Fouad.id,"How to plant tomato",2)
-# garden.seed_bank.member_balances[Fouad.id] -= 2
-
-# a = garden.market_place.answer_question(q.id,Mina.id,"I have no idea")
-# garden.market_place.accept_answer(q.id,a.id)
-
-
-
-
-
-# print(garden.seed_bank.member_balances[Fouad_id])
-
-
-
-# # maybe we can increase contricution points based on the karam
-
-# # print(q.status)
-# # print(a.accepted)
-# # print(garden.market_place.ratings)
-# # print(garden.market_place.member_karam)
-
-# # i = 0
-# # for plot in garden.plots.values():
-# #         print("plot.id:", plot.id)
-# #         print("plot.size:", plot.size)
-# #         print("plot.center:", plot.center)
-# #         print("plot.height:", plot.height)
-# #         print("plot.width:", plot.width)
-# #         print("plot.area:", plot.area)
-# #         print("plot.status:", plot.status)
-# #         print("plot.boundary:", plot.boundary)
-# #         print("plot.status:", plot.status)
-# #         print("plot.zone:", plot.zone)
-# #         print("plot.sun_profile:", plot.sun_profile)
-# #         print("plot.soil:", plot.soil_quality)
-# #         i += 1
-# #         if (i >= 1):
-# #             break
-
-
-
-
-
-
-# print(Mina.swaps_req_ids)
-# print(swap.status)
-
-
-
-# # garden.volunteer_system.complete_shift(shift)
-# print(Steven.inventory)
-# print(garden.seed_bank.member_balances[Steven.id])
-# print(garden.seed_bank.seeds)
-
-
-# print(garden.tool_library.bookings[0].status)
-# print(garden.tool_library.tools.get("Rototiller").status)
-
-
-# #print(garden.volunteer_system.ledger)
 
 
 
