@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from member import Member
 import uuid
 
 

@@ -260,66 +260,66 @@ class VolunteerSystem:
         self.shifts.append(shift)
         return shift
 
-# TEST SCENARIO
-if __name__ == "__main__":
-    system = VolunteerSystem()
+# # TEST SCENARIO
+# if __name__ == "__main__":
+#     system = VolunteerSystem()
 
-    # Create members
-    m1 = Member("M1", "Alice")
-    m2 = Member("M2", "Bob")
-    m3 = Member("M3", "Charlie")
+#     # Create members
+#     m1 = Member("M1", "Alice")
+#     m2 = Member("M2", "Bob")
+#     m3 = Member("M3", "Charlie")
 
-    system.add_member(m1)
-    system.add_member(m2)
-    system.add_member(m3)
+#     system.add_member(m1)
+#     system.add_member(m2)
+#     system.add_member(m3)
 
-    # Create tasks
-    t1 = Task("Turn Compost", 9, "heavy")
-    t2 = Task("Move Soil", 8, "heavy")
-    t3 = Task("Water Plants", 3, "light")
+#     # Create tasks
+#     t1 = Task("Turn Compost", 9, "heavy")
+#     t2 = Task("Move Soil", 8, "heavy")
+#     t3 = Task("Water Plants", 3, "light")
 
-    # Create shift
-    shift = Shift(datetime.now())
-    shift.add_task(t1)
-    shift.add_task(t2)
-    shift.add_task(t3)
+#     # Create shift
+#     shift = Shift(datetime.now())
+#     shift.add_task(t1)
+#     shift.add_task(t2)
+#     shift.add_task(t3)
 
-    system.shifts.append(shift)
+#     system.shifts.append(shift)
 
-    print("\n--- Assign Members ---")
-    system.assign_members_to_shift(shift, ["M1", "M2", "M3"])
+#     print("\n--- Assign Members ---")
+#     system.assign_members_to_shift(shift, ["M1", "M2", "M3"])
 
-    for a in shift.assignments:
-        print(vars(a))
+#     for a in shift.assignments:
+#         print(vars(a))
 
-    print("\n--- Complete Shift ---")
-    system.complete_shift(shift)
+#     print("\n--- Complete Shift ---")
+#     system.complete_shift(shift)
 
-    for m in system.members.values():
-        print(m.name, "hours:", m.total_volunteer_hours,
-              "| heavy:", m.heavy_task_count,
-              "| light:", m.light_task_count)
+#     for m in system.members.values():
+#         print(m.name, "hours:", m.total_volunteer_hours,
+#               "| heavy:", m.heavy_task_count,
+#               "| light:", m.light_task_count)
 
-    print("\n--- Ledger ---")
-    print(system.ledger.records)
+#     print("\n--- Ledger ---")
+#     print(system.ledger.records)
 
-    print("\n--- History (Alice) ---")
-    history = system.get_member_history("M1")
-    for h in history:
-        print(h)
+#     print("\n--- History (Alice) ---")
+#     history = system.get_member_history("M1")
+#     for h in history:
+#         print(h)
 
-    print("\n--- Next Shift (Balance Test) ---")
-    shift2 = Shift(datetime.now() + timedelta(days=1))
-    shift2.add_task(t1)
-    shift2.add_task(t3)
+#     print("\n--- Next Shift (Balance Test) ---")
+#     shift2 = Shift(datetime.now() + timedelta(days=1))
+#     shift2.add_task(t1)
+#     shift2.add_task(t3)
 
-    system.shifts.append(shift2)
+#     system.shifts.append(shift2)
 
-    system.assign_members_to_shift(shift2, ["M1", "M2", "M3"])
+#     system.assign_members_to_shift(shift2, ["M1", "M2", "M3"])
 
-    for a in shift2.assignments:
-        print(vars(a))
+#     for a in shift2.assignments:
+#         print(vars(a))
 
-    print("\n--- Weather Cancellation ---")
-    system.check_weather(shift2, "heavy_rain")
-    print("Shift2 status:", shift2.status)
+#     print("\n--- Weather Cancellation ---")
+#     system.check_weather(shift2, "heavy_rain")
+#     print("Shift2 status:", shift2.status)

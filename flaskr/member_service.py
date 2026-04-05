@@ -1,7 +1,7 @@
 class Member:
     def __init__(self,id,name,mytype="normal"):
             
-        self.id  = id
+        self.id   = id
         self.name = name
         self.type = mytype
         
@@ -25,8 +25,6 @@ class Member:
     def add_credits(self, amount):
         self.credits += amount
 
-    def minus_credits(self, amount):
-        self.credits -= amount 
 
     def get_member_tier_factor(self):
         count = len(self.rental_history)
@@ -38,17 +36,14 @@ class Member:
         else:
             return 0.8
  
-    def calculate_residency_duration(self):
-        total_days = 0
+    def is_available(self):
+        return self.rental is None or not self.rental.is_full()
 
-        for rental in self.rental_history:
-            start = rental.start_date
-            end   = rental.end_date
-            total_days += (end - start).days
-        
-        return total_days    
+    def get_owners(self):
+        if self.rental and self.rental.participants:
+            return [p.member.name for p in self.rental.participants]
+        return []   
 
-   
     @classmethod
     def create_member(self, member_name):
         return Member(1,member_name)

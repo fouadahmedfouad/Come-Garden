@@ -46,7 +46,6 @@ class Plot:
   
     current_crop_type: None
     last_crop: None
-    crop_history: list
 
     watering_schedule = []
 
@@ -84,7 +83,6 @@ class Plot:
 
 
         self.neighbors = []
-        self.tasks = []
         self.soil_quality = soil_quality
 
 
@@ -93,13 +91,16 @@ class Plot:
         self.soil_state = "healthy"   # healthy, depleted, recovering
         self.ph_level = 7
         self.fertilizer_history = []
-        self.crop_history = []
         self.current_crop_type = None
         self.last_crop = None
 
         self.infection_status = None
         self.infection_type = None
         self.infection_date = None
+
+        watering_schedule = None
+        self.tasks = []
+        self.alerts = []
 
     def is_available(self):
         return self.rental is None or not self.rental.is_full()
@@ -108,16 +109,16 @@ class Plot:
         if self.rental and self.rental.participants:
             return [p.member.name for p in self.rental.participants]
         return []
-
-    def set_sunlight(self, hours):
-        self.sunlight_hours = hours
-
-        if hours >= 8:
-            self.sunlight_level = "high"
-        elif hours >= 5:
-            self.sunlight_level = "medium"
-        else:
-            self.sunlight_level = "low"
+    #
+    # def set_sunlight(self, hours):
+    #     self.sunlight_hours = hours
+    #
+    #     if hours >= 8:
+    #         self.sunlight_level = "high"
+    #     elif hours >= 5:
+    #         self.sunlight_level = "medium"
+    #     else:
+    #         self.sunlight_level = "low"
 
     def add_to_season_list(self,record):
         if record not in self.season_waitlist:
@@ -223,3 +224,10 @@ class Plot:
     
         self.tasks = tasks  # overwrite instead of extend
         return tasks
+
+    def get_activities(self):
+        result = []
+        for act in self.activities:
+            result.append(act)
+
+        return result
