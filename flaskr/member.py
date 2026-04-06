@@ -28,6 +28,9 @@ class Member:
     def minus_credits(self, amount):
         self.credits -= amount 
 
+    def add_rental_to_history(self,p):
+        self.rental_history.append(p)
+
     def get_member_tier_factor(self):
         count = len(self.rental_history)
 
@@ -48,11 +51,15 @@ class Member:
         
         return total_days    
 
-   
-    @classmethod
-    def create_member(self, member_name):
-        return Member(1,member_name)
+    @property
+    def is_admin(self):
+        return False
 
 class Admin(Member):
     def __init__(self, id, name):
         super().__init__(id, name)
+
+    @property
+    def is_admin(self):
+        return True
+

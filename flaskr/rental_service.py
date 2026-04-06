@@ -2,8 +2,32 @@ from datetime import datetime, timedelta
 from environment import TimeProvider
 from config import  PLOTS, PLOT_PRICING, SOIL_PRICE_MODIFIER, MEMBERSHIP_DISCOUNT, SUN_SCHEDULE
 
+from exceptions import (
+    MemberNotFoundError,
+    PlotNotFoundError,
+    InvalidShareError,
+    InsufficientCreditsError,
+    DuplicateParticipantError
+)
+from enums import RentalStatus
+
+
+class Application:
+    def __init__(self, member, plot, share=1.0, auto_renew=False):
+        self.member = member
+        self.plot = plot
+        self.share = share
+        self.auto_renew = auto_renew
+
+        self.score = self.calculate_score()
+
+    def calculate_score(self):
+        residency = self.member.calculate_residency_duration()
+        return residency * 2 + self.member.contribution_points
+
+
 class Participant:
-    def __init__(self, member, share, cost, late, auto_renew):
+    def __init__(self, member, share, cost, late, auto_renew=False):
         self.member = member
         self.share = share
         self.cost = cost
@@ -20,9 +44,10 @@ class Rental:
         self.total_price = total_price
         self.participants = []
         self.status = status
-
-        self.start_date = max(datetime.now().date(), season.start_date)
-        self.end_date = season.end_date
+        
+        self.season = season
+        self.start_date = max(datetime.now().date(), season.first_day())
+        self.end_date = season.last_day()
 
     def total_share(self):
         return sum(p.share for p in self.participants)
@@ -30,146 +55,66 @@ class Rental:
     def is_full(self):
         return round(self.total_share(), 5) >= 1.0
 
+class RentalResult:
+    def __init__(self, status, rental=None):
+        self.status = status
+        self.rental = rental
 
 
 
-class RentalService():
+class RentalService:
 
-    # def _add_participant(self, rental, member, share, calculated_cost, season, auto_renew):
-    #
-    #  
     def calculate_rent(self, plot, member):
         base = PLOT_PRICING[plot.size]
         soil_factor = SOIL_PRICE_MODIFIER.get(plot.soil_quality, 1)
-        discount    = MEMBERSHIP_DISCOUNT.get(member.type, 1)
+        discount = MEMBERSHIP_DISCOUNT.get(member.type, 1)
         tier_factor = member.get_member_tier_factor()
 
         return base * soil_factor * discount * tier_factor
 
 
-    def process_waitlist(self,plot):
-        waitlist = plot.waitlist
+    def _rent_plot(self, plot, member, current_season, app) -> RentalResult:
+        if member is None:
+            raise MemberNotFoundError("Member does not exist")
 
-        for record in waitlist:
-            _,share,member_id = record
-            member= self.members[member_id]
+        if plot is None:
+            raise PlotNotFoundError("Plot does not exist")
 
-            result = self.rental_service.rent_plot(plot,member,self.current_season, record) 
-            print(result)
-
-        plot.waitlist = []
-
-
-    def rent_plot(self, plot, member, current_season, record):
-        plot_cost = PLOT_PRICING[plot.size]
-
-        score,share,member_id = record
-
-        if not member:
-            # "Member doesn't exist"
-            print("member doesn't exist")
-            return None
-
-
-        if not plot:
-            # "Plot doesn't exist"
-            print("Plot doesn't exist")
-            return None
-
-        if share not in [0.5,1]:
-            print("Share should be half or full")
-            return None
+        if app.share not in (0.5, 1):
+            raise InvalidShareError("Share must be 0.5 or 1")
 
         cost = self.calculate_rent(plot, member)
- 
-        if member.credits < cost:
-            print("Not enough credits")
-            return None
 
+        if member.credits < cost:
+            raise InsufficientCreditsError("Not enough credits")
 
         if plot.rental is None:
-            plot.rental = Rental(plot, plot_cost, current_season)
-       
+            plot.rental = Rental(plot, PLOT_PRICING[plot.size], current_season)
+
         rental = plot.rental
-          
 
-        for p in rental.participants:
-            if p.member == member:
-                print("Member already in this rental")
-                return None
+        # NOTE: We're allowing only one participant for each member (we can later change that or allow updating participant share)
+        if any(p.member == member for p in rental.participants):
+            raise DuplicateParticipantError("Already renting this plot")
 
+        if rental.is_full() or rental.total_share() + app.share > 1.0:
+            plot.add_to_season_list(app)
+            return RentalResult(RentalStatus.WAITLISTED)
 
-
-        if rental.is_full(): 
-            plot.add_to_season_list(record)
-            print("Seasoned")
-            return 2
-
-        if rental.total_share() + share > 1.0:
-                plot.add_to_season_list(record)
-                print("Seasoned")
-                return 2
-
-
-        ## OtherWise rent it to him
-
-
-
+        # ---- Rent ----
         today = TimeProvider().now()
-        midpoint = current_season.start_date + (current_season.end_date - current_season.start_date) / 2 
+
+        midpoint = current_season.first_day() + (
+            current_season.last_day() - current_season.first_day()
+        ) / 2
+
         late = today > midpoint
 
-        ## NOTE: WE'RE STORING THE MEMBER OBJECT
-        participant = Participant(member, share, cost, late, False)
-
+        participant = Participant(member, app.share, cost, late, app.auto_renew)
         participant.start_date = rental.start_date
-        participant.end_date   = rental.end_date
+        participant.end_date = rental.end_date
 
         member.minus_credits(cost)
         rental.participants.append(participant)
 
-
-        # print(f"{member.name} rented {share*100:.0f}% of plot {plot_id}")
-        return 1
-
-   
-    def renew_rental(self, plot, old_rental, next_season):
-        plot_cost = PLOT_PRICING[plot.size]
-
-        if old_rental is None:
-            return
-
-        new_rental = Rental(plot, plot_cost, next_season)
-    
-        for p in old_rental.participants:
-
-            # TODO: don't store the object, try store a record instead
-            member = p.member
-            member.rental_history.append(p)
-
-            if p.auto_renew:
-                cost = self.calculate_rent(plot.id,p.member.id)
-
-                success = self._add_participant_to_rental(
-                    new_rental,
-                    p.member,
-                    p.share,
-                    cost
-                )
-                if success:
-                    p.status = "Active"
-            else:
-                p.status = "Terminated"
-    
-        if not new_rental.participants:
-            plot.rental = None
-        else:
-            plot.rental = new_rental
-    
-        old_rental.status = "Expired"
-
-        return plot.rental   
-
-
-
-
+        return RentalResult(RentalStatus.SUCCESS, rental)

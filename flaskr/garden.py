@@ -1,12 +1,10 @@
 from datetime import datetime, timedelta
 
-from rental import Rental 
 from member import Member, Admin
-from environment import TimeProvider, Season
+from environment import TimeProvider, EnvService
 
 from plot_service import PlotService
-
-from rental_service import RentalService 
+from rental_service import RentalService, Application
 
 from toolLib import ToolLibrary
 from seedBank import SeedBank
@@ -15,8 +13,10 @@ from market   import Marketplace
 
 from config import  PLOTS, PLOT_PRICING, SOIL_PRICE_MODIFIER, MEMBERSHIP_DISCOUNT, SUN_SCHEDULE
 
+from enums import RentalStatus
+from exceptions import (RentalError, PermissionDeniedError)
 
-class Garden():
+class Garden:
 
     def __init__(self,width,height,road=2):
         self.allotment_width = width
@@ -26,74 +26,39 @@ class Garden():
         self.plot_service = PlotService()
         self.rental_service = RentalService()
 
-        self.members = {}
-        self.seasons = ()
-        
-        self.current_season = None
-        self.time_provider = TimeProvider()
 
-       
+        self.members = {}
+        self.members_by_name = {}
+
+        self.time_provider = TimeProvider() 
+        self.env_service = EnvService(region="EG")
+        self.env_service.initialize()
+
+      
         self.plots = {}
-        self.plots_by_type = {"large":[],"small":[] }
       
         self.tool_library = ToolLibrary()
         self.seed_bank = SeedBank()
         self.volunteer_system = VolunteerSystem()
         self.market_place = Marketplace()
       
-        self.errno = 0
-
-    @staticmethod
-    def build_seasons(year):
-        return [
-            Season("Spring", datetime(year, 3, 1).date(), datetime(year, 5, 31).date()),
-            Season("Summer", datetime(year, 7, 1).date(), datetime(year, 10, 31).date()),
-            Season("Fall", datetime(year, 11, 1).date(), datetime(year, 11, 30).date()),
-            Season("Winter", datetime(year, 12, 1).date(), datetime(year + 1, 2, 28).date()),
-        ]
-    
-    def update_current_season(self):
-        today = self.time_provider.now()
-    
-        for season in self.seasons:
-            if season.start_date <= today <= season.end_date:
-                self.current_season = season
-                return
-    
-        self.current_season = None
-
-    def get_next_season(self):
-        today = self.time_provider.now()
-    
-        for season in self.seasons:
-            if season.start_date > today:
-                return season
-    
-        return None
-    
-    def add_plot(self,plot,plot_size):
-        self.plots[plot.id] = plot
-        self.plots_by_type[plot_size].append(plot)
-
-    def add_member(self, member):
-        self.members[member.id] = member
-
     # def cad_render(self):
     #     try: 
-    #         import cadquery as cq
-    #         from ocp_vscode import show
+    #         from ocp_vscode  import show
+    #         from cadquery import cq
+    
     #     except ImportError:
     #         raise RuntimeError("cad_render requires cadquery and ocp_vscode installed")
-
+    
     #     large_pts = self.large_pts
     #     small_pts = self.small_pts
-
+    
     #     alt_w = self.allotment_width
     #     alt_h = self.allotment_height
         
     #     lw, lh = PLOTS["large"]["w"], PLOTS["large"]["h"]
     #     sw, sh = PLOTS["small"]["w"], PLOTS["small"]["h"] 
-
+    
     #     alt_thickness = 1
     #     plt_thickness = 3
         
@@ -102,20 +67,41 @@ class Garden():
     #         allotment = allotment.pushPoints(large_pts).rect(lw, lh).extrude(plt_thickness)
     #     if small_pts:
     #         allotment = allotment.pushPoints(small_pts).rect(sw, sh).extrude(plt_thickness)
-   
-    def join_member(self,memberFullName):
-        for member in self.members.values():
-            if member.name == memberFullName:
-                return f"{member.name} Already exist with Id {member.id}"
+ 
+    def rent_plot(self, plot, member, season, record):
+        try:
+            result = self.rental_service._rent_plot(
+                plot, member, season, record
+            )
 
-        member_id = len(self.members) 
-        member = Member(member_id,memberFullName)
-        self.add_member(member)
+            if result.status == RentalStatus.SUCCESS:
+                # print(f"Plot {plot.id} rented successfully")
+                pass
 
-        ## TODO:ADD member to voulnteer system ledger
+            elif result.status == RentalStatus.WAITLISTED:
+                # print(f"Plot {plot.id} is full → added to next season")
+                pass
+
+            return result
+
+        except RentalError as e:
+            print(f"Rental failed: {e}")
+            return None
         
-        return member
+    def _generate_member_id(self):
+        return len(self.members) + 1
 
+    def join_member(self, name):
+        if name in self.members_by_name:
+            raise ValueError("Member already exists")
+    
+        member_id = self._generate_member_id()
+        member = Member(member_id, name)
+    
+        self.members[member_id] = member
+        self.members_by_name[name] = member
+    
+        return member
  
     def plot_maker(self):
         large_pts,small_pts = self.plot_service.generate_layout(self.allotment_width,self.allotment_height,self.road)
@@ -127,8 +113,8 @@ class Garden():
         lw, lh = PLOTS["large"]["w"], PLOTS["large"]["h"]
         for (x,y) in large_pts:
             plot = self.plot_service.create_plot(plot_id,"large",x,y,lw,lh)
-            self.plot_service.assign_sun_profile(plot,alt_w) 
-            self.add_plot(plot,"large")
+            plot.assign_sun_profile(alt_w) 
+            self.add_plot(plot)
             plot_id += 1
 
         # SMALL 
@@ -136,9 +122,10 @@ class Garden():
         if small_pts:
             for (x,y) in small_pts:
                 plot = self.plot_service.create_plot(plot_id,"small",x,y,sw,sh) 
-                self.plot_service.assign_sun_profile(plot,alt_w) 
-                self.add_plot(plot,"small")
+                plot.assign_sun_profile(alt_w) 
+                self.add_plot(plot)
                 plot_id += 1
+
         ## NOTE: WE'RE PASSING THE PLOTS
         self.plot_service.assign_neighbors(self.plots.values())
 
@@ -147,363 +134,251 @@ class Garden():
         self.totalPlots = len(large_pts) + len(small_pts)
 
         self.large_pts = large_pts
-        self.small_pts = small_pts
- 
-    # def calculate_rent(self, plot_id, member_id):
-    #     plot = self.plots.get(plot_id)
-    #     member= self.members[member_id]
+        self.small_pts = small_pts  
 
-    #     base = PLOT_PRICING[plot.size]
-    #     soil_factor = SOIL_PRICE_MODIFIER.get(plot.soil_quality, 1)
-    #     discount    = MEMBERSHIP_DISCOUNT.get(member.type, 1)
-    #     tier_factor = member.get_member_tier_factor()
+    def audit_rental_end(self):
+        today = self.time_provider.now()
+        current_season = self.get_current_season()
+        new_season = self.get_next_season()
+        last_day = current_season.last_day()
 
-    #     return base * soil_factor * discount * tier_factor
+        today = last_day ## debug
 
-    # def calculate_residency_duration(self,member_id):
-    #     member = self.members.get(member_id)
-    #     total_days = 0
-    
-    #     for rental in member.rental_history:
-    #         start = rental.start_date
-    #         end   = rental.end_date
-    #         total_days += (end - start).days
-        
-    #     return total_days    
+        for plot in self.plots.values():
+            old_rental = plot.rental
+            if not old_rental:
+                continue
 
-    # def add_participant_to_rental(self, rental, member, share, cost, auto_renew=False):
-    #     try:
-    #         self.rental_service._add_participant(rental, member, share, cost, self.current_season, auto_renew)
-    #         return True
-    #     except ValueError as e:
-    #         print("Error:", e)
-    #         return False
+            ## LAST DAY OF THE SEASON 
+            if today >= last_day:
+                # print(f"Today is the day for ending plot {plot.id} rental")
 
-    ## duration is one season for all plots
-    ## TODO: The state of rents and error handling
+                ## UPDATE CURRENT SEASON 
+                self.env_service.update_current_season()
 
-    # def _rent_plot(self, plot_id, member_id, share=1.0):
-    #     plot = self.plots.get(plot_id)
-    #     plot_cost = PLOT_PRICING[plot.size]
-    #     member = self.members.get(member_id)
-    #     current_season = self.current_season
+                plot.rental = None
 
-    #     self.errno = 0
+                ## Renew autos
 
-    #     if not member:
-    #         # "Member doesn't exist"
-    #         self.errno  = -3
-    #         print("member doesn't exist")
-    #         return None
+                plot.waitlist = []
+                for p in old_rental.participants:
+                    if p.auto_renew:
+                        self.apply(p.member, plot.id,p.share,p.auto_renew)
+                    else:
+                        p.status = "Terminated"
+                if plot.waitlist:
+                    self.process_waitlist(plot,plot.waitlist, new_season) 
 
+                ## Rent the rest
+                plot.season_waitlist.sort(reverse=True)
+                self.process_waitlist(plot, plot.season_waitlist, new_season)
+                plot.season_waitlist = []
 
-    #     if not plot:
-    #         # "Plot doesn't exist"
-    #         self.errno  = -4
-    #         print("Plot doesn't exist")
-    #         return None
-    #     if share not in [0.5,1]:
-    #         print("Share should be half or full")
-    #         return None
-
-    #     cost = self.rental_service.calculate_rent(plot, member)
- 
-    #     if member.credits < cost:
-    #         print("Not enough credits")
-    #         return None
-
-
-    #     if plot.rental is None:
-    #         plot.rental = Rental(plot, plot_cost, current_season)
-       
-    #     rental = plot.rental
-   
-    #     if not plot.is_available():
-    #         # "Plot already rented"
-    #         self.errno  = -1
-    #         print("plot already rented")
-    #         return None 
-        
-    #     added = self.add_participant_to_rental(rental, member, share, cost)
-
-    #     if not added:
-    #         #  str(e)
-    #         self.errno  = -2
-    #         print("Rental system error")
-    #         return None 
-
-    #     # print(f"{member.name} rented {share*100:.0f}% of plot {plot_id}")
-    #     return plot
-
-    # def rent_plot(self,plot_id):
-    #     plot = self.plots.get(plot_id)
-        
-    #     if not plot:
-    #         print("Plot doesn't exist")
-    #         return -2
-
-    #     ## Note that the member_id is the factor after score and share 
-    #     plot.waitlist.sort(reverse=True)
-
-    #     for record in plot.waitlist:
-    #         _,share,member_id = record
-    #         if not self._rent_plot(plot.id, member_id, share):
-    #             plot.add_to_season_list(record)
-
-    #     plot.waitlist = []
-    #     return 1 
-    
-    # def renew_rental(self, plot, old_rental):
-    #     next_season = self.get_next_season()
-    #     plot_cost = PLOT_PRICING[plot.size]
-
-    #     if old_rental is None:
-    #         return
-
-    #     new_rental = Rental(plot, plot_cost, next_season)
-    
-    #     for p in old_rental.participants:
-
-    #         # TODO: don't store the object, try store a record instead
-    #         member = p.member
-    #         member.rental_history.append(p)
-
-    #         if p.auto_renew:
-    #             cost = self.rental_service.calculate_rent(plot.id,p.member.id)
-
-    #             success = self.add_participant_to_rental(
-    #                 new_rental,
-    #                 p.member,
-    #                 p.share,
-    #                 cost
-    #             )
-    #             if success:
-    #                 p.status = "Active"
-    #         else:
-    #             p.status = "Terminated"
-    
-    #     if not new_rental.participants:
-    #         plot.rental = None
-    #     else:
-    #         plot.rental = new_rental
-    
-    #     old_rental.status = "Expired"
-
-    #     return plot.rental   
-
-    # def audit_rental_end(self):
-    #     today = self.time_provider.now()
-
-    #     for plot in self.plots.values():
-    #         rental = plot.rental
-    #         if not rental or rental.status != "Active":
-    #             continue
-
-    #         # today = rental.end_date
-    #         if today >= rental.end_date:
-    #             print(f"Today is the day for ending plot {plot.id} rental")
-    #             next_season = self.get_next_season()
-
-    #             self.rental_service.renew_rental(plot, rental, next_season)
-
-    #             plot.season_waitlist.sort(reverse=True)
-
-    #             for record in plot.season_waitlist:
-    #                 _,share,member_id = record
-    #                 member = self.members[member_id]
-
-    #                 self.rental_service._rent_plot(plot, member, self.current_season, share)
-
-    #             plot.season_waitlist = []
+            old_rental.status = "Expired"
+            plot.history_of_rentals.append(old_rental)
 
     def audit_rent_plots(self):
-        ## Close before 15 days of the end of the season
+       today = self.time_provider.now() 
+       current_season = self.get_current_season()
+       last_day = current_season.last_day()
+
        for plot in self.plots.values():  
-           if self.time_provider.now() < self.current_season.end_date - timedelta(days=15):
+           if today < last_day:
                 if plot.is_available():
-                    self.rental_service.process_waitlist(plot)
+                    self.process_waitlist(plot,plot.waitlist)
+                    plot.waitlist = []
 
-    def process_waitlist(self,plot):
-        waitlist = plot.waitlist
 
-        for record in waitlist:
-            _,share,member_id = record
-            member= self.members[member_id]
+    def audit_rental_alert(self):
+        ## Alert before 15 days of the end of the season
+        today = self.time_provider.now()
+        current_season = self.get_current_season()
+        last_day = current_season.last_day()
+       
 
-            result = self.rental_service.rent_plot(plot,member,self.current_season, record) 
-            print(result)
+        #today = self.current_season.end_date - timedelta(days=10) ## debug
 
-        plot.waitlist = []
-
-    # def audit_rental_alert(self):
-    #     ## Alert before 15 days of the end of the season
-    #     for plot in self.plots.values():  
-    #         if plot.rental:
-    #             if plot.rental.status != "Active":
-    #                 return
+        for plot in self.plots.values():  
+            if not plot.rental:
+                continue
                 
-    #             if self.time_provider.now() >= plot.rental.end_date - timedelta(days=15):
+            if today >= last_day - timedelta(days=15):
+            
+                for p in plot.rental.participants:
                 
-    #                 for p in plot.rental.participants:
-                    
-    #                     if p.auto_renew:
-    #                         p.status = "ExpiringSoon" # check your credits for renewal
-    #                     else:
-    #                         p.status = "PendingTermination" 
-           
+                    if p.auto_renew:
+                        p.status = "ExpiringSoon" # check your credits for renewal
+                    else:
+                        p.status = "PendingTermination" 
+
+    def process_waitlist(self, plot, waitlist, season=None):
+        current_season = season
+        
+        if not current_season:
+            current_season = self.get_current_season() 
+            
+        for app in waitlist:
+            self.rent_plot(plot,app.member,current_season,app) 
+
     ## TODO: then add audit to rebuild seasons for new season
-    def build(self):
-        year = self.time_provider.now().year
 
-        self.seasons = ( 
-            self.build_seasons(year - 1) +
-            self.build_seasons(year) 
-            )
 
-        self.update_current_season()
+
+
+    def build(self): 
         self.plot_maker()
 
         return self
-   
-    # --- Permission Decorator ---
+
+    def get_current_season(self):
+        return self.env_service.get_current_season()
+
+    def get_next_season(self):
+        return self.env_service.get_next_season() 
+
+    def add_plot(self,plot):
+        self.plots[plot.id] = plot
+
+
+
+
+
+
     def admin_required(func):
         def wrapper(self, user, *args, **kwargs):
-            if not isinstance(user, Admin):
-                print("Permission denied")
-                return
+            if not getattr(user, "is_admin", False):
+                raise PermissionDeniedError("Admin privileges required")
             return func(self, user, *args, **kwargs)
         return wrapper
-    
-
-
    
   ##  -------- Rent ---------
   
-    def apply(self,user,plot_id,share=1.0): 
+    def apply(self, user, plot_id, share=1.0, auto_renew=False):
         plot = self.plots.get(plot_id)
-        member_residency_duration = user.calculate_residency_duration()
+    
+        if not user or not plot:
+            return
+    
+        application = Application(user, plot, share, auto_renew)
+        plot.waitlist.append(application)
 
-        if user and plot:
-            score = member_residency_duration*2 + user.contribution_points
-            plot.waitlist.append((score,share,user.id))
+#    ## -------- Tools --------
 
-   ## -------- Tools --------
+#     def book_tool(self, user, tool_name, duration_hours):
+#         booking = self.tool_library.book_tool(tool_name, user.id, duration_hours)
+#         if booking:
+#             user.booking_ids.append(booking.id)
+    
+    
+#     def return_tool(self, user, booking_id, cleaned=True):
+#         self.tool_library.return_tool(booking_id, cleaned)
+    
+    
+#     def report_damage(self, user, booking_id, severity):
+#         self.tool_library.report_damage(booking_id, severity)
+    
+    
+#     ## -------- Seed Bank --------
+    
+#     def deposit(self, user, seed_type, quantity, viability, origin, gt_flag, age, lah=True):
+#         batch_info = self.seed_bank.create_batchInfo(
+#             viability, age, gt_flag, origin, lah
+#         )
+#         batch = self.seed_bank.create_batch(seed_type, quantity, batch_info)
+    
+#         self.seed_bank.deposit(user.id, batch)
+    
+    
+#     def withdraw(self, user, seed_type, quantity):
+#         withdrawn = self.seed_bank.withdraw(user.id, seed_type, quantity)
+#         if withdrawn:
+#             user.inventory.append(withdrawn)
+    
+    
+#     ## -------- Volunteer --------
+    
+#     @admin_required
+#     def create_shift(self, user, date):
+#         shift = self.volunteer_system.create_shift(date)
+#         user.shifts_ids.append(shift.shift_id)
+    
+    
+#     @admin_required
+#     def create_task(self, user, shift_id, name, difficulty, category):
+#         self.volunteer_system.add_task(shift_id, name, difficulty, category)
+    
+    
+#     @admin_required
+#     def assign_members(self, user, shift_id, members_ids):
+#         for mid in members_ids:
+#             member = self.members.get(mid)
+#             member.shifts_ids.append(shift_id)
 
-    def book_tool(self, user, tool_name, duration_hours):
-        booking = self.tool_library.book_tool(tool_name, user.id, duration_hours)
-        if booking:
-            user.booking_ids.append(booking.id)
-    
-    
-    def return_tool(self, user, booking_id, cleaned=True):
-        self.tool_library.return_tool(booking_id, cleaned)
-    
-    
-    def report_damage(self, user, booking_id, severity):
-        self.tool_library.report_damage(booking_id, severity)
-    
-    
-    ## -------- Seed Bank --------
-    
-    def deposit(self, user, seed_type, quantity, viability, origin, gt_flag, age, lah=True):
-        batch_info = self.seed_bank.create_batchInfo(
-            viability, age, gt_flag, origin, lah
-        )
-        batch = self.seed_bank.create_batch(seed_type, quantity, batch_info)
-    
-        self.seed_bank.deposit(user.id, batch)
-    
-    
-    def withdraw(self, user, seed_type, quantity):
-        withdrawn = self.seed_bank.withdraw(user.id, seed_type, quantity)
-        if withdrawn:
-            user.inventory.append(withdrawn)
-    
-    
-    ## -------- Volunteer --------
-    
-    @admin_required
-    def create_shift(self, user, date):
-        shift = self.volunteer_system.create_shift(date)
-        user.shifts_ids.append(shift.shift_id)
-    
-    
-    @admin_required
-    def create_task(self, user, shift_id, name, difficulty, category):
-        self.volunteer_system.add_task(shift_id, name, difficulty, category)
-    
-    
-    @admin_required
-    def assign_members(self, user, shift_id, members_ids):
-        for mid in members_ids:
-            member = self.members.get(mid)
-            member.shifts_ids.append(shift_id)
+#         self.volunteer_system.assign_members_to_shift(shift_id, members_ids)
 
-        self.volunteer_system.assign_members_to_shift(shift_id, members_ids)
-
-    @admin_required      
-    def check_weather(self, user, shift_id,weather):
-        garden.volunteer_system.check_weather(shift_id, weather)
-
-
-    def request_swap(self, user, target_id , shift_id):
-        target = self.members.get(target_id)
-
-        swap = garden.volunteer_system.request_swap(user.id,target_id,shift_id)
-        target.swaps_req_ids.append(swap.request_id)
-
-    def approve_swap(self, user, req_id):
-        garden.volunteer_system.approve_swap(req_id)
-
-        ## remove the req_id from the user
-        user.swaps_req_ids.remove(req_id)
+#     @admin_required      
+#     def check_weather(self, user, shift_id,weather):
+#         garden.volunteer_system.check_weather(shift_id, weather)
 
 
-    # ------- Market Place --------
-    def create_listing(self,user, item, quantity, listing_type, request=None):
-        listing = garden.market_place.create_listing(user.id, item, quantity, listing_type, request)
-        if listing:
-            user.listings_ids.append(listing.id) 
+#     def request_swap(self, user, target_id , shift_id):
+#         target = self.members.get(target_id)
 
-    def trade(self, user, listing_id):
-        garden.market_place.request_trade(listing_id, user.id)
+#         swap = garden.volunteer_system.request_swap(user.id,target_id,shift_id)
+#         target.swaps_req_ids.append(swap.request_id)
 
-    def complete_trade(self, user, trade_id):
-        garden.market_place.complete_trade(trade_id, user.id)
+#     def approve_swap(self, user, req_id):
+#         garden.volunteer_system.approve_swap(req_id)
 
-    def get_listings(self, user):
-        return garden.market_place.get_listings()
+#         ## remove the req_id from the user
+#         user.swaps_req_ids.remove(req_id)
+
+
+#     # ------- Market Place --------
+#     def create_listing(self,user, item, quantity, listing_type, request=None):
+#         listing = garden.market_place.create_listing(user.id, item, quantity, listing_type, request)
+#         if listing:
+#             user.listings_ids.append(listing.id) 
+
+#     def trade(self, user, listing_id):
+#         garden.market_place.request_trade(listing_id, user.id)
+
+#     def complete_trade(self, user, trade_id):
+#         garden.market_place.complete_trade(trade_id, user.id)
+
+#     def get_listings(self, user):
+#         return garden.market_place.get_listings()
     
-    def get_my_trades(self, user):
-        return garden.market_place.get_my_trades(user.id)
+#     def get_my_trades(self, user):
+#         return garden.market_place.get_my_trades(user.id)
  
-    def get_trades_by_listing(self, user, listing_id):
-        return garden.market_place.get_trades_by_listing(listing_id)
+#     def get_trades_by_listing(self, user, listing_id):
+#         return garden.market_place.get_trades_by_listing(listing_id)
 
-    def ask_question(self, user, content, bounty):
-        q = garden.market_place.ask_question(user.id, content,bounty)
-        if q:
-            user.questions_ids.append(q.id)
-            user.credits -= q.bounty
+#     def ask_question(self, user, content, bounty):
+#         q = garden.market_place.ask_question(user.id, content,bounty)
+#         if q:
+#             user.questions_ids.append(q.id)
+#             user.credits -= q.bounty
 
-        return q
+#         return q
 
-    def answer_question(self, user, question_id, content):
-        garden.market_place.answer_question(user.id, question_id, content)
+#     def answer_question(self, user, question_id, content):
+#         garden.market_place.answer_question(user.id, question_id, content)
 
-    def get_questions(self, user):
-        return garden.market_place.get_questions()
+#     def get_questions(self, user):
+#         return garden.market_place.get_questions()
     
-    def get_answers_by_question(self, user, question_id):
-        return garden.market_place.get_answers_by_question(Fouad.questions_ids[0])
+#     def get_answers_by_question(self, user, question_id):
+#         return garden.market_place.get_answers_by_question(Fouad.questions_ids[0])
  
-    def accept_answer(self, user, question_id, answer_id):
-        answer = garden.market_place.accept_answer(question_id,answer_id)
-        responder = self.members[answer.responder_id]
+#     def accept_answer(self, user, question_id, answer_id):
+#         answer = garden.market_place.accept_answer(question_id,answer_id)
+#         responder = self.members[answer.responder_id]
 
-        responder.credits += q.bounty
+#         responder.credits += q.bounty
 
-
+    ## manually, or we can automate it with audit
     def alert_neighbors(self, plot_id):
         plot = self.plots[plot_id]
 
@@ -526,86 +401,49 @@ class Garden():
 
         # return alerts
 
-    def seasonal_update(self,user):
-        for plot in self.plots.values():
-            plot.generate_winter_tasks()
+    # def seasonal_update(self,user):
+    #     for plot in self.plots.values():
+    #         plot.generate_winter_tasks()
 
-    def propagate_infections(self,user):
-        # all_alerts = []
-        for plot_id in self.plots:
-            alerts = self.alert_neighbors(plot_id)
-        #     all_alerts.extend(alerts)
-        # return all_alerts
+    # def propagate_infections(self):
+    #     all_alerts = []
+    #     for plot_id in self.plots:
+    #         alerts = self.alert_neighbors(plot_id)
+    #         all_alerts.extend(alerts)
+    #     return all_alerts
 
 
-    def add_credits(self, user, amount):
-        user.add_credits(amount)
-     
-    def add_crop(self, user, plot_id, crop_name):
-        plot = garden.plots.get(plot_id)
 
-        ## constraint same plot same crop at a time.
-        if plot.current_crop_type and plot.current_crop_type != crop_name:
-            raise Exception("Conflict")
-
-        if user.name in plot.get_owners():
-            plot.add_crop(user.name,crop_name)
-
-    def add_fertilizer(self, user, plot_id, fertilizer_name):
-        plot = garden.plots.get(plot_id)
-        plot.add_fertilizer(user, fertilizer_name)
-
-    def new_crop(self, user, plot_id, crop_name):
-        plot = garden.plots.get(plot_id)
-        plot.current_crop_type = crop_name
-
-        garden.add_crop(user, plot_id, crop_name)
-
-    def report_infection(self, user, plot_id, infection_name, date):
-        plot = garden.plots.get(plot_id)
-        plot.report_infection(infection_name, date)
-
-    
-    def generate_watering_schedule(self, user, plot_id):
-        plot = garden.plots.get(plot_id)
-        plot.generate_watering_schedule()
-
-    def get_activities(self,user,plot_id):
-        plot = garden.plots.get(plot_id)
-        activities = plot.get_activities()
-
-        return activities
-    
-    def get_owners(self, user, plot_id):
-        plot = garden.plots.get(plot_id)
-        owners = plot.get_owners()
-
-        return owners
+    ## LAYERED APPROACH (if we need to prevent user from adding crops to other plots in the garden)
+    ## Okay, we need so, but LAYERED APPROACH VS SMART PLOTS
 
 # TODO: Moving all these other stuff into Services
         
 garden = Garden(100,50).build()
 
-i = 0
-for p in garden.plots.values():
-    print(vars(p))
-    i += 1
-    if i >= 1:
-        break
-# garden.cad_render()
+
+
+### RENT TEST
 
 Fouad = garden.join_member("Fouad Ahmed Fouad")
+Mina = garden.join_member("Mina")
+
 Fouad.add_credits(200)
+Mina.add_credits(200)
 
-garden.apply(Fouad, garden.plots[1].id,1)
+# garden.apply(Fouad, garden.plots[1].id,0.5,False)
+# garden.apply(Mina, garden.plots[1].id,1)
 
-# garden.audit_rental_alert()
-# garden.audit_rental_end()
 # garden.audit_rent_plots()
-garden.process_waitlist(garden.plots[1])
+
+# print(garden.plots[1].get_owners())
+# garden.audit_rental_end()
+# print(garden.plots[1].get_owners())
 
 
-print(garden.plots[1].get_owners())
+
+
+
 
 # admin = Admin(100,"Fouad Ahmed")
 # garden.members[100] = admin
@@ -618,14 +456,25 @@ print(garden.plots[1].get_owners())
 # Steven = garden.join_member("Steven")
 
 
-# garden.add_credits(Fouad, 200)
-# garden.add_credits(Mina, 200)
+## Planting Test
+my_plot = garden.plots[1]
+
+garden.apply(Fouad, my_plot.id,0.5)
+garden.apply(Mina, my_plot.id,0.5)
+garden.audit_rent_plots()
+
+my_plot.add_crop(Fouad,"tomato")
+my_plot.add_crop(Mina,"tomato")
+my_plot.add_crop(Mina,"tomato")
+
+my_plot.add_fertilizer(Fouad, "organic")
+
+my_plot.generate_watering_schedule(Fouad)
+my_plot.generate_winter_tasks(Mina)
+my_plot.report_infection(Fouad, "infection type", garden.time_provider.now())
 
 
-# # ## Planting
 
-
-# # pick some plots
 # plot1 = garden.plots[1]
 # plot2 = garden.plots[2]
 # plot3 = garden.plots[3]

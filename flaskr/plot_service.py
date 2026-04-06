@@ -1,11 +1,10 @@
-
 CROP_WATER_NEEDS = {
         "carrot": {"freq": 3, "amount": 2},
         "tomato": {"freq": 2, "amount": 3},
         "lettuce": {"freq": 1, "amount": 2},
         }
 
-from config import  PLOTS, PLOT_PRICING, SOIL_PRICE_MODIFIER, MEMBERSHIP_DISCOUNT, SUN_SCHEDULE
+from config import  PLOTS, SUN_SCHEDULE
 
 class Plot:
 
@@ -25,6 +24,7 @@ class Plot:
         self.sun_profile = None
  
         self.rental = None
+        self.history_of_rentals = []
         self.waitlist = []
         self.season_waitlist = []
       
@@ -48,7 +48,8 @@ class Plot:
         self.infection_type = None
         self.infection_date = None
 
-        watering_schedule = None
+        self.watering_schedule = []
+
         self.tasks = []
         self.alerts = []
 
@@ -80,19 +81,140 @@ class Plot:
             return [p.member.name for p in self.rental.participants]
         return []
 
-
     def add_to_season_list(self,record):
         if record not in self.season_waitlist:
             self.season_waitlist.append(record)
             return True
         return False
 
+    def update_soil_state(self):
+        # Extract recent activities
+        recent_activities = self.activities[-10:]
+    
+        # --- Get last 3 crops ---
+        recent_crops = [
+            act["crop"]
+            for act in recent_activities
+            if act["type"] == "plant"
+        ][-3:]
+    
+        # --- Get last fertilizer ---
+        last_fertilizer = None
+        for act in reversed(recent_activities):
+            if act["type"] == "fertilize":
+                last_fertilizer = act
+                break
+    
+        # --- Rule 1: Organic fertilizer gives recovery boost (highest priority) ---
+        if last_fertilizer and last_fertilizer.get("fertilizer") == "organic":
+            self.soil_state = "recovering"
+            return
+    
+        # --- Rule 2: Same crop repeated → depletion ---
+        if len(recent_crops) >= 3 and len(set(recent_crops)) == 1:
+            self.soil_state = "depleted"
+            return
+    
+        # --- Rule 3: Crop diversity → healthy ---
+        if len(recent_crops) >= 2 and len(set(recent_crops)) > 1:
+            self.soil_state = "healthy"
+            return
+    
+        # --- Default fallback ---
+        self.soil_state = "neutral"
+
+    def ownership_required(func):
+        def wrapper(self, user, *args, **kwargs):
+            if user.name not in self.get_owners():
+                raise PermissionError(f"{user.name} is not allowed to perform this action")
+            return func(self, user, *args, **kwargs)
+        return wrapper
+
+    @ownership_required
+    def add_crop(self, user, crop_name):
+        if self.current_crop_type and self.current_crop_type != crop_name:
+            raise Exception("Conflict")
+
+        self.last_crop = self.current_crop_type
+        self.current_crop_type = crop_name
+    
+        self.activities.append({
+            "type": "plant",
+            "member": user.name,
+            "crop": crop_name
+        })
+    
+        self.update_soil_state()
+
+    ## This operatoin should be considered accepted from both owners
+    @ownership_required
+    def update_current_crop(self, user, new_crop_name):
+        self.current_crop_type = new_crop_name 
+
+    @ownership_required
+    def add_fertilizer(self, user, fert_type):
+        self.activities.append({
+            "type": "fertilize",
+            "member": user.name,
+            "fertilizer": fert_type
+        })
+    
+        self.update_soil_state()
+
+    @ownership_required
+    def generate_watering_schedule(self, user):
+        if not self.current_crop_type:
+            return []
+
+        crop = CROP_WATER_NEEDS.get(self.current_crop_type)
+        if not crop:
+            return []
+
+        schedule = []
+        for day in range(0, 14, crop["freq"]):  # 2-week plan
+            schedule.append({
+                "day": day,
+                "amount": crop["amount"]
+            })
+
+        self.watering_schedule = schedule
+        return schedule
+
+    @ownership_required
+    def report_infection(self, user, infection_type, date):
+        self.infection_status = "infected"
+        self.infection_type = infection_type
+        self.infection_date = date
+
+    @ownership_required
+    def generate_winter_tasks(self, user):
+        tasks = []
+    
+        if self.soil_state == "depleted":
+            tasks.append("Add heavy compost")
+    
+        if self.ph_level < 6:
+            tasks.append("Add lime to raise pH")
+    
+        tasks.extend([
+            "Remove dead plants",
+            "Cover soil",
+            "Clean tools"
+        ])
+    
+        self.tasks = tasks  # overwrite instead of extend
+        return tasks
+
+    @ownership_required
+    def get_activities(self, user):
+        result = []
+        for act in self.activities:
+            result.append(act)
+
+        return result
 
 class PlotService():
-
-    def assign_sun_profile(self, plot, alt_w):
-        plot.assign_sun_profile(alt_w)
-
+    
     def create_plot(self,plot_id,plot_size,x,y,w,h):
         center = (round(x,2), round(y,2))
         area = w * h
@@ -194,15 +316,16 @@ class PlotService():
     
         if debug:
             print(f"""
-    --- CHECKING PLOTS {p1.id} & {p2.id} ---
-    centers: {p1.center} vs {p2.center}
-    dx={dx}, max_dx={max_dx}, diff={abs(dx - max_dx)}
-    dy={dy}, max_dy={max_dy}, diff={abs(dy - max_dy)}
-    tol={tol}
-    horizontal={horizontal}, vertical={vertical}
-    RESULT={result}
-    """)
+                --- CHECKING PLOTS {p1.id} & {p2.id} ---
+                    centers: {p1.center} vs {p2.center}
+                    dx={dx}, max_dx={max_dx}, diff={abs(dx - max_dx)}
+                    dy={dy}, max_dy={max_dy}, diff={abs(dy - max_dy)}
+                    tol={tol}
+                    horizontal={horizontal}, vertical={vertical}
+                    RESULT={result}
+                """)
     
-        return result    
+        return result   
+
 
 
