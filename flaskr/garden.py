@@ -11,7 +11,7 @@ from seedBank import SeedBank
 from tasks    import VolunteerSystem 
 from market   import Marketplace
 
-from config import  PLOTS, PLOT_PRICING, SOIL_PRICE_MODIFIER, MEMBERSHIP_DISCOUNT, SUN_SCHEDULE
+from config import  PLOTS
 
 from enums import RentalStatus
 from exceptions import (RentalError, PermissionDeniedError)
@@ -87,6 +87,12 @@ class Garden:
         except RentalError as e:
             print(f"Rental failed: {e}")
             return None
+
+        except Exception as e:
+            # Unexpected system errors
+            print(f"[Critical] Unexpected failure in rental system: {e}")
+            return None
+ 
         
     def _generate_member_id(self):
         return len(self.members) + 1
@@ -170,7 +176,9 @@ class Garden:
                     self.process_waitlist(plot,plot.waitlist, new_season) 
 
                 ## Rent the rest
+                ## TODO: WAITLIST CONTAINS APPLICATIONS
                 plot.season_waitlist.sort(reverse=True)
+
                 self.process_waitlist(plot, plot.season_waitlist, new_season)
                 plot.season_waitlist = []
 
@@ -185,6 +193,10 @@ class Garden:
        for plot in self.plots.values():  
            if today < last_day:
                 if plot.is_available():
+                    
+                    ## TODO: WAITLIST CONTAINS APPLICATIONS
+                    ## AND WHERE is the sorting?
+
                     self.process_waitlist(plot,plot.waitlist)
                     plot.waitlist = []
 
@@ -262,21 +274,6 @@ class Garden:
         application = Application(user, plot, share, auto_renew)
         plot.waitlist.append(application)
 
-#    ## -------- Tools --------
-
-#     def book_tool(self, user, tool_name, duration_hours):
-#         booking = self.tool_library.book_tool(tool_name, user.id, duration_hours)
-#         if booking:
-#             user.booking_ids.append(booking.id)
-    
-    
-#     def return_tool(self, user, booking_id, cleaned=True):
-#         self.tool_library.return_tool(booking_id, cleaned)
-    
-    
-#     def report_damage(self, user, booking_id, severity):
-#         self.tool_library.report_damage(booking_id, severity)
-    
     
 #     ## -------- Seed Bank --------
     
@@ -384,22 +381,12 @@ class Garden:
 
         if plot.infection_status != "infected":
             return []
-
-        alerts = []
-
+        
         for neighbor_id in plot.neighbors:
             neighbor = self.plots.get(neighbor_id)
 
             if neighbor:
                 neighbor.alerts.append(f"Warning: Nearby infection from {plot.id} ({plot.infection_type})")
-        #         owners = neighbor.get_owners()
-        #         alerts.append({
-        #             "plot": neighbor_id,
-        #             "owners": owners,
-        #             "message": f"Warning: Nearby infection ({plot.infection_type})"
-        #         })
-
-        # return alerts
 
     # def seasonal_update(self,user):
     #     for plot in self.plots.values():
@@ -420,6 +407,9 @@ class Garden:
 # TODO: Moving all these other stuff into Services
         
 garden = Garden(100,50).build()
+admin = Admin(100,"Fouad Ahmed")
+garden.members[100] = admin
+
 
 
 
@@ -434,6 +424,7 @@ Mina.add_credits(200)
 # garden.apply(Fouad, garden.plots[1].id,0.5,False)
 # garden.apply(Mina, garden.plots[1].id,1)
 
+# print(garden.plots[1].waitlist)
 # garden.audit_rent_plots()
 
 # print(garden.plots[1].get_owners())
@@ -441,12 +432,62 @@ Mina.add_credits(200)
 # print(garden.plots[1].get_owners())
 
 
+### Planting Test
+
+# my_plot = garden.plots[1]
+
+# garden.apply(Fouad, my_plot.id,0.5)
+# garden.apply(Mina, my_plot.id,0.5)
+# garden.audit_rent_plots()
+
+# result = my_plot.add_crop(Fouad,"tomato")
+# my_plot.add_crop(Mina,"tomato")
+# my_plot.add_crop(Mina,"tomato")
+
+# my_plot.add_fertilizer(Fouad, "organic")
+# my_plot.report_infection("infection type", garden.time_provider.now())
+
+# my_plot.generate_watering_schedule()
+# my_plot.generate_winter_tasks()
+
+# print(my_plot.neighbors)
+# garden.alert_neighbors(my_plot.id)
+# print(garden.plots[2].alerts)
+# print(garden.plots[5].alerts)
+# print(garden.plots[6].alerts)
 
 
 
 
-# admin = Admin(100,"Fouad Ahmed")
-# garden.members[100] = admin
+### Tool library Test
+
+# admin add tools
+# garden.tool_library.add_tool(admin, "Rototiller", usage_status="high", maintenance_threshold_hours=5)
+
+# # Fouad books a tool
+# booking = garden.tool_library.book_tool(Fouad, "Rototiller", duration_hours=10)
+# booking2 = garden.tool_library.book_tool(Mina, "Rototiller", duration_hours=10)
+
+
+# # Fouad returns the tool 
+
+# garden.tool_library.return_tool(Fouad.booking_ids[0], cleaned=True)
+# print(garden.tool_library.tools[booking.tool_name].status)
+# garden.tool_library.return_tool(Mina.booking_ids[0], cleaned=True)
+# print(garden.tool_library.tools[booking.tool_name].status)
+
+# # Fouad report damage 
+# garden.tool_library.report_damage(Fouad.booking_ids[0], severity="medium")
+
+
+
+
+
+
+
+
+
+
 
 # Fouad = garden.join_member("Fouad Ahmed Fouad")
 # Mina = garden.join_member("Mina")
@@ -454,25 +495,6 @@ Mina.add_credits(200)
 # Ria = garden.join_member("Ria")
 # Saged = garden.join_member("Saged")
 # Steven = garden.join_member("Steven")
-
-
-## Planting Test
-my_plot = garden.plots[1]
-
-garden.apply(Fouad, my_plot.id,0.5)
-garden.apply(Mina, my_plot.id,0.5)
-garden.audit_rent_plots()
-
-my_plot.add_crop(Fouad,"tomato")
-my_plot.add_crop(Mina,"tomato")
-my_plot.add_crop(Mina,"tomato")
-
-my_plot.add_fertilizer(Fouad, "organic")
-
-my_plot.generate_watering_schedule(Fouad)
-my_plot.generate_winter_tasks(Mina)
-my_plot.report_infection(Fouad, "infection type", garden.time_provider.now())
-
 
 
 # plot1 = garden.plots[1]
@@ -516,13 +538,11 @@ my_plot.report_infection(Fouad, "infection type", garden.time_provider.now())
 # ## if the plot is available and all requirments are satasifed (eg., enough credits)
 # ## the plot is rented, Otherwise the member is added to season waitlist that will be proccessed
 # ## by the end of the season.
+
 # garden.audit_rental_alert()
 # garden.audit_rental_end()
 # garden.audit_rent_plots()
 
-
-# #### Tools
-# garden.tool_library.add_tool("Rototiller", usage_status="high", maintenance_threshold_hours=5)
 
 # ## Resolve penality routine
 
@@ -557,18 +577,6 @@ my_plot.report_infection(Fouad, "infection type", garden.time_provider.now())
 # plot0 = garden.plots[1]
 # garden.apply(Fouad,plot0.id, share=1)
 # garden.apply(Mina, plot0.id, share=1)
-
-
-# ### TOOLS
-
-# ## Fouad books a tool
-# garden.book_tool(Steven, "Rototiller", duration_hours=10)
-
-# ## Fouad returns the tool 
-# garden.return_tool(Steven, Steven.booking_ids[0], cleaned=True)
-
-# ## Fouad report damage
-# garden.report_damage(Steven, Steven.booking_ids[0], severity="medium")
 
 
 

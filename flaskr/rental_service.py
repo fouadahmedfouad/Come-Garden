@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from environment import TimeProvider
-from config import  PLOTS, PLOT_PRICING, SOIL_PRICE_MODIFIER, MEMBERSHIP_DISCOUNT, SUN_SCHEDULE
+from config import  PLOT_PRICING, SOIL_PRICE_MODIFIER, MEMBERSHIP_DISCOUNT
 
 from exceptions import (
     MemberNotFoundError,

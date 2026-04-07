@@ -6,6 +6,9 @@ CROP_WATER_NEEDS = {
 
 from config import  PLOTS, SUN_SCHEDULE
 
+from exceptions import PlotError,  MemberNotInPlot
+from enums import PlotStatus
+
 class Plot:
 
     def __init__(self,plot_id,plot_size,center,width,height,area,boundary,status,soil_quality="normal"):
@@ -123,46 +126,65 @@ class Plot:
         # --- Default fallback ---
         self.soil_state = "neutral"
 
-    def ownership_required(func):
-        def wrapper(self, user, *args, **kwargs):
-            if user.name not in self.get_owners():
-                raise PermissionError(f"{user.name} is not allowed to perform this action")
-            return func(self, user, *args, **kwargs)
-        return wrapper
-
-    @ownership_required
     def add_crop(self, user, crop_name):
-        if self.current_crop_type and self.current_crop_type != crop_name:
-            raise Exception("Conflict")
+        try:
+            if user.name not in self.get_owners():
+                raise MemberNotInPlot("Member doesn't own the plot")
+    
+            if self.current_crop_type and self.current_crop_type != crop_name:
+                raise Exception("Conflict")
+    
+            self.last_crop = self.current_crop_type
+            self.current_crop_type = crop_name
+        
+            self.activities.append({
+                "type": "plant",
+                "member": user.name,
+                "crop": crop_name
+            })
+            self.update_soil_state()
 
-        self.last_crop = self.current_crop_type
-        self.current_crop_type = crop_name
-    
-        self.activities.append({
-            "type": "plant",
-            "member": user.name,
-            "crop": crop_name
-        })
-    
-        self.update_soil_state()
+            return PlotStatus.SUCCESS
+
+        except PlotError as e:
+            return PlotStatus.FAILED
+
 
     ## This operatoin should be considered accepted from both owners
-    @ownership_required
     def update_current_crop(self, user, new_crop_name):
-        self.current_crop_type = new_crop_name 
+        try:
+            if user.name not in self.get_owners():
+                raise MemberNotInPlot("Member doesn't own the plot")
+            self.current_crop_type = new_crop_name 
 
-    @ownership_required
+            return PlotStatus.SUCCESS
+        except PlotError as e:
+            return PlotStatus.FAILED
+
+
     def add_fertilizer(self, user, fert_type):
-        self.activities.append({
-            "type": "fertilize",
-            "member": user.name,
-            "fertilizer": fert_type
-        })
-    
-        self.update_soil_state()
+        try:
+            if user.name not in self.get_owners():
+                raise MemberNotInPlot("Member doesn't own the plot")
+            self.activities.append({
+                "type": "fertilize",
+                "member": user.name,
+                "fertilizer": fert_type
+            })
+            self.update_soil_state()
 
-    @ownership_required
-    def generate_watering_schedule(self, user):
+            return PlotStatus.SUCCESS
+        except PlotError as e:
+            return PlotStatus.FAILED
+    
+
+    def report_infection(self, infection_type, date):
+        self.infection_status = "infected"
+        self.infection_type = infection_type
+        self.infection_date = date
+
+
+    def generate_watering_schedule(self):
         if not self.current_crop_type:
             return []
 
@@ -180,14 +202,7 @@ class Plot:
         self.watering_schedule = schedule
         return schedule
 
-    @ownership_required
-    def report_infection(self, user, infection_type, date):
-        self.infection_status = "infected"
-        self.infection_type = infection_type
-        self.infection_date = date
-
-    @ownership_required
-    def generate_winter_tasks(self, user):
+    def generate_winter_tasks(self):
         tasks = []
     
         if self.soil_state == "depleted":
@@ -205,8 +220,7 @@ class Plot:
         self.tasks = tasks  # overwrite instead of extend
         return tasks
 
-    @ownership_required
-    def get_activities(self, user):
+    def get_activities(self):
         result = []
         for act in self.activities:
             result.append(act)
@@ -326,6 +340,3 @@ class PlotService():
                 """)
     
         return result   
-
-
-
