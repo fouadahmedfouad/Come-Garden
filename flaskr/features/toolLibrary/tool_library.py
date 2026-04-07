@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 import uuid
 
-from exceptions import (
+from features.toolLibrary.tool_library_exceptions import (
     ToolLibraryError,
     InvalidUserError,
     ToolNotFoundError,
@@ -13,64 +13,15 @@ from exceptions import (
     InvalidDamageSeverityError,
     AuthorizationError
 )
+from features.toolLibrary.tool_library_info import (
+    Tool,
+    Booking,
+    Penalty,
+)
 
-
-class Tool:
-    def __init__(self, tool_name, usage_status, maintenance_threshold_hours=50):
-        self.name = tool_name
-        self.status = "available"
-        self.usage_status = usage_status
-        self.maintenance_threshold = maintenance_threshold_hours
-        self.total_usage_hours = 0
-        self.waitlist = []
-        self.resources = []
-
-    def check_out(self):
-        if self.status != "available":
-            raise ValueError("Tool not available")
-        self.status = "checked_out"
-
-    def return_tool(self, hours_used):
-        self.total_usage_hours += hours_used
-
-        if self.total_usage_hours >= self.maintenance_threshold:
-            self.status = "in_repair"
-        else:
-            self.status = "available"
-
-    def repair(self):
-        self.status = "available"
-        self.total_usage_hours = 0
-
-    def mark_for_repair(self):
-        if self.status == "decommissioned":
-            raise ValueError("Cannot repair decommissioned tool")
-        self.status = "in_repair"
-
-    def decommission(self):
-        self.status = "decommissioned"
-
-class Booking:
-    def __init__(self, tool_name, user_id, start_time, end_time):
-        self.id = str(uuid.uuid4())
-        self.tool_name = tool_name
-        self.user_id = user_id
-        self.start_time = start_time
-        self.end_time = end_time
-        self.actual_return_time = None
-        self.status = "in_use"
-        self.penalty_id = None
-
-class Penalty:
-    def __init__(self, user_id, booking_id, type_, amount):
-        self.id = str(uuid.uuid4())
-        self.user_id = user_id
-        self.booking_id = booking_id
-        self.type = type_  # fine or service
-        self.amount = amount
-        self.status = "pending"
-        self.created_at = datetime.now()
-
+from features.toolLibrary.tool_library_results import (
+    BookingResult
+)
 
 class ToolLibrary:
     def __init__(self):
@@ -79,7 +30,7 @@ class ToolLibrary:
         self.penalties = {}
         self.tasks = []
 
-    def book_tool(self, user, tool_name, duration_hours):
+    def book_tool(self, user, tool_name, duration_hours) -> BookingResult:
         """
         Books a tool for a given user and duration.
         Handles availability, penalties, and waitlisting with robust error handling.
@@ -117,26 +68,22 @@ class ToolLibrary:
                 user.booking_ids = getattr(user, "booking_ids", [])
                 user.booking_ids.append(booking.id)
     
-                return booking
-    
+                return BookingResult(success=True, booking=booking)
+
             # --- Waitlist fallback ---
             score = self.calculate_priority(user.id)
             tool.waitlist.append((score, duration_hours, user))
-    
-            # Raise AFTER side-effect (important design)
-            raise ToolUnavailableError(tool_name, start_time, end_time)
+            return BookingResult(success=False, waitlisted=True,
+                                 error=f"Tool '{tool_name}' unavailable from {start_time} to {end_time}")
     
         except ToolLibraryError as e:
-            # Known domain errors (clean + meaningful)
-            print(f"[ToolLibraryError] {e}")
-            return None
+            return BookingResult(success=False, error=str(e))
     
         except Exception as e:
             # Unexpected system errors
-            print(f"[Critical] Unexpected failure in booking system: {e}")
-            return None
+            return BookingResult(success=False, error=f"[Critical] Unexpected failure: {e}")
 
-    def return_tool(self, booking_id, cleaned=True):
+    def return_tool(self, booking_id, cleaned=True) -> bool:
         """
         Handles tool return, penalties, and booking status updates.
         """
@@ -181,7 +128,7 @@ class ToolLibrary:
             return False   
 
 
-    def report_damage(self, booking_id, severity="medium"):
+    def report_damage(self, booking_id, severity="medium") -> Penalty:
         """
         Reports damage for a booking and applies penalties based on severity.
         """
@@ -227,7 +174,7 @@ class ToolLibrary:
             print(f"[Critical] Unexpected failure during damage report: {e}")
             return None   
 
-    def add_tool(self, user, tool_name, usage_status="low", maintenance_threshold_hours=5):
+    def add_tool(self, user, tool_name, usage_status="low", maintenance_threshold_hours=5) -> Tool | None:
         """
         Admin-only: Adds a new tool to the system.
         """

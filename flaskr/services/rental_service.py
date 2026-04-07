@@ -2,7 +2,7 @@ from datetime import datetime
 from environment import TimeProvider
 from config import  PLOT_PRICING, SOIL_PRICE_MODIFIER, MEMBERSHIP_DISCOUNT
 
-from exceptions import (
+from services.service_exceptions import (
     MemberNotFoundError,
     PlotNotFoundError,
     InvalidShareError,
@@ -59,8 +59,6 @@ class RentalResult:
     def __init__(self, status, rental=None):
         self.status = status
         self.rental = rental
-
-
 
 class RentalService:
 

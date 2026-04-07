@@ -6,9 +6,20 @@ CROP_WATER_NEEDS = {
 
 from config import  PLOTS, SUN_SCHEDULE
 
-from exceptions import PlotError,  MemberNotInPlot
+from services.service_exceptions import PlotError,  MemberNotInPlot
 from enums import PlotStatus
+from dataclasses import dataclass
+from typing import List, Tuple
 
+@dataclass
+class PlotGenerationResult:
+    plots: list               # all created plot objects
+    large_pts: List[Tuple[int,int]]
+    small_pts: List[Tuple[int,int]]
+    total_large: int
+    total_small: int
+    
+    total: int
 class Plot:
 
     def __init__(self,plot_id,plot_size,center,width,height,area,boundary,status,soil_quality="normal"):
@@ -302,6 +313,41 @@ class PlotService():
             small_pts += self.generate_points(startTx, startTy, stepSx, stepSy, nsp_W_top, nsp_H_top)
 
         return large_pts,small_pts
+
+    def generate_and_assign(self, allotment_width, allotment_height, road, plot_id_start=1):
+        large_pts, small_pts = self.generate_layout(allotment_width, allotment_height, road)
+    
+        plots = []
+        plot_id = plot_id_start
+        alt_w = allotment_width
+    
+        # Create LARGE plots
+        lw, lh = PLOTS["large"]["w"], PLOTS["large"]["h"]
+        for x, y in large_pts:
+            plot = self.create_plot(plot_id, "large", x, y, lw, lh)
+            plot.assign_sun_profile(alt_w)
+            plots.append(plot)
+            plot_id += 1
+    
+        # Create SMALL plots
+        sw, sh = PLOTS["small"]["w"], PLOTS["small"]["h"]
+        for x, y in small_pts:
+            plot = self.create_plot(plot_id, "small", x, y, sw, sh)
+            plot.assign_sun_profile(alt_w)
+            plots.append(plot)
+            plot_id += 1
+    
+        # Assign neighbors
+        self.assign_neighbors(plots)
+    
+        return PlotGenerationResult(
+            plots=plots,
+            large_pts=large_pts,
+            small_pts=small_pts,
+            total_large=len(large_pts),
+            total_small=len(small_pts),
+            total=len(large_pts)+len(small_pts)
+        )
 
     def assign_neighbors(self, plots):
     
