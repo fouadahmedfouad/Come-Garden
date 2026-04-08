@@ -189,12 +189,6 @@ class Plot:
             return PlotStatus.FAILED
     
 
-    def report_infection(self, infection_type, date):
-        self.infection_status = "infected"
-        self.infection_type = infection_type
-        self.infection_date = date
-
-
     def generate_watering_schedule(self):
         if not self.current_crop_type:
             return []
@@ -358,7 +352,7 @@ class PlotService():
                     continue
 
                 if self.are_neighbors(p1, p2):
-                    p1.neighbors.append(p2.id)
+                    p1.neighbors.append(p2)
 
 
     def are_neighbors(self, p1, p2, tol=2.5, debug=False):
@@ -385,4 +379,26 @@ class PlotService():
                     RESULT={result}
                 """)
     
-        return result   
+        return result
+
+
+    
+      ## manually, or we can automate it with audit
+    def alert_neighbors(self, plot):
+        if plot.infection_status != "infected":
+            return
+        
+        for neighbor in plot.neighbors:
+            if neighbor:
+                neighbor.alerts.append(f"Warning: Nearby infection from {plot.id} ({plot.infection_type})")
+
+
+
+    def report_infection(self, plot, infection_type, date):
+        plot.infection_status = "infected"
+        plot.infection_type = infection_type
+        plot.infection_date = date
+
+        self.alert_neighbors(plot)
+
+

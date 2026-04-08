@@ -1,0 +1,24 @@
+**Design Smell Identification and Mitigation**
+
+A design smell identified in the system is **tight coupling and the tendency toward a God Class** within the central `Garden` class.
+
+**Description of the Smell**:
+The `Garden` class is responsible for coordinating multiple subsystems, including plot management, rental services, member management, environmental tracking, and additional features such as the seed bank, tool library, volunteer system, and marketplace. This results in high coupling between the `Garden` class and many other components.
+
+**Why This is a Problem**:
+
+* Changes in one subsystem may require modifications in the `Garden` class.
+* The class becomes harder to maintain and extend.
+* It reduces reusability of individual components.
+* It increases the risk of introducing errors when modifying the system.
+
+**How It Can Be Avoided / Improved**:
+
+* Introduce a **facade or controller layer** to delegate responsibilities instead of centralizing them in the `Garden` class.
+* Apply **dependency injection** to reduce direct dependencies between components.
+* Further separate responsibilities by allowing each service (e.g., PlotService, RentalService) to manage its own lifecycle and interactions.
+* Use **event-driven communication** between components to reduce direct coupling.
+
+**Impact of Improvement**:
+Reducing coupling will improve system maintainability, scalability, and flexibility, making it easier to extend the system with new features or modify existing ones without affecting the overall structure.
+

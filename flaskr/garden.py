@@ -40,33 +40,34 @@ class Garden:
         self.volunteer_system = VolunteerSystem()
         self.market_place = Marketplace()
       
-    def cad_render(self):
-        try: 
-            from ocp_vscode  import show
-            from cadquery import cq
-    
-        except ImportError:
-            raise RuntimeError("cad_render requires cadquery and ocp_vscode installed")
-    
-        large_pts = self.large_pts
-        small_pts = self.small_pts
-    
-        alt_w = self.allotment_width
-        alt_h = self.allotment_height
-        
-        lw, lh = PLOTS["large"]["w"], PLOTS["large"]["h"]
-        sw, sh = PLOTS["small"]["w"], PLOTS["small"]["h"] 
-    
-        alt_thickness = 1
-        plt_thickness = 3
-        
-        allotment = cq.Workplane("front").rect(alt_w,alt_h).extrude(alt_thickness)
-        if large_pts:
-            allotment = allotment.pushPoints(large_pts).rect(lw, lh).extrude(plt_thickness)
-        if small_pts:
-            allotment = allotment.pushPoints(small_pts).rect(sw, sh).extrude(plt_thickness)
- 
-        show(allotment, reset_camera=True)        
+ #    def cad_render(self):
+ #        try: 
+ #            from ocp_vscode  import show
+ #            from cadquery import cq
+ #    
+ #        except ImportError:
+ #            raise RuntimeError("cad_render requires cadquery and ocp_vscode installed")
+ #    
+ #        large_pts = self.large_pts
+ #        small_pts = self.small_pts
+ #    
+ #        alt_w = self.allotment_width
+ #        alt_h = self.allotment_height
+ #        
+ #        lw, lh = PLOTS["large"]["w"], PLOTS["large"]["h"]
+ #        sw, sh = PLOTS["small"]["w"], PLOTS["small"]["h"] 
+ #    
+ #        alt_thickness = 1
+ #        plt_thickness = 3
+ #        
+ #        allotment = cq.Workplane("front").rect(alt_w,alt_h).extrude(alt_thickness)
+ #        if large_pts:
+ #            allotment = allotment.pushPoints(large_pts).rect(lw, lh).extrude(plt_thickness)
+ #        if small_pts:
+ #            allotment = allotment.pushPoints(small_pts).rect(sw, sh).extrude(plt_thickness)
+ # 
+ #        show(allotment, reset_camera=True)        
+ #
 
     def _generate_member_id(self):
         return len(self.members) + 1
@@ -84,6 +85,8 @@ class Garden:
         return member
     
     def plot_maker(self):
+        """ Construct the plots """
+
         result = self.plot_service.generate_and_assign(
             self.allotment_width, self.allotment_height, self.road
         )
@@ -99,91 +102,51 @@ class Garden:
 
 
     def audit_rental_end(self):
+        """ End rentals by the end of the season (end of the rental) """
+
         today = self.time_provider.now()
         current_season = self.get_current_season()
         new_season = self.get_next_season()
         last_day = current_season.last_day()
 
-        today = last_day ## debug
+        if today >= last_day:
+            self.env_service.update_current_season()
 
         for plot in self.plots.values():
-            old_rental = plot.rental
-            if not old_rental:
+            if not  plot.rental: 
                 continue
-
-            ## LAST DAY OF THE SEASON 
-            if today >= last_day:
-                # print(f"Today is the day for ending plot {plot.id} rental")
-
-                ## UPDATE CURRENT SEASON 
-                self.env_service.update_current_season()
-
-                plot.rental = None
-
-                ## Renew autos
-
-                plot.waitlist = []
-                for p in old_rental.participants:
-                    if p.auto_renew:
-                        self.apply(p.member, plot.id,p.share,p.auto_renew)
-                    else:
-                        p.status = "Terminated"
-                if plot.waitlist:
-                    self.process_waitlist(plot,plot.waitlist, new_season) 
-
-                ## Rent the rest
-                plot.season_waitlist.sort(key=lambda app: app.score, reverse=True)            
-
-                self.process_waitlist(plot, plot.season_waitlist, new_season)
-                plot.season_waitlist = []
-
-            old_rental.status = "Expired"
-            plot.history_of_rentals.append(old_rental)
+            
+            self.rental_service.end_rentals(plot, new_season)
 
     def audit_rent_plots(self):
+       """ Process the plot applications """
+
        today = self.time_provider.now() 
        current_season = self.get_current_season()
        last_day = current_season.last_day()
 
-       for plot in self.plots.values():  
-           if today < last_day:
-                if plot.is_available():
-                    plot.season_waitlist.sort(key=lambda app: app.score, reverse=True)
-                    self.process_waitlist(plot,plot.waitlist)
-                    plot.waitlist = []
-
+       if today < last_day:
+           for plot in self.plots.values():  
+            if plot.is_available():
+                self.rental_service.rent_plots(plot, current_season)
 
     def audit_rental_alert(self):
-        ## Alert before 15 days of the end of the season
+        """ Alert before 15 days of the end of the season """
+
         today = self.time_provider.now()
         current_season = self.get_current_season()
         last_day = current_season.last_day()
        
 
-        #today = self.current_season.end_date - timedelta(days=10) ## debug
 
-        for plot in self.plots.values():  
-            if not plot.rental:
-                continue
+        if today >= last_day - timedelta(days=15):
+            for plot in self.plots.values():  
+                if not plot.rental:
+                    continue
                 
-            if today >= last_day - timedelta(days=15):
-            
-                for p in plot.rental.participants:
-                
-                    if p.auto_renew:
-                        p.status = "ExpiringSoon" # check your credits for renewal
-                    else:
-                        p.status = "PendingTermination" 
+                self.rental_service.rental_alert(plot)
 
-    def process_waitlist(self, plot, waitlist, season=None):
-        current_season = season
-        
-        if not current_season:
-        # Add plots to the manager
-            current_season = self.get_current_season() 
-            
-        for app in waitlist:
-            self.rental_service._rent_plot(plot,app.member,current_season,app) 
+
 
     ## TODO: then add audit to rebuild seasons for new season
 
@@ -200,37 +163,9 @@ class Garden:
     def add_plot(self,plot):
         self.plots[plot.id] = plot
 
-    def apply(self, user, plot_id, share=1.0, auto_renew=False):
-        plot = self.plots.get(plot_id)
-    
-        if not user or not plot:
-            return
-    
-        application = Application(user, plot, share, auto_renew)
-        plot.waitlist.append(application)
-
-        return application
-
-      ## manually, or we can automate it with audit
-    def alert_neighbors(self, plot_id):
-        plot = self.plots[plot_id]
-
-        if plot.infection_status != "infected":
-            return []
-        
-        for neighbor_id in plot.neighbors:
-            neighbor = self.plots.get(neighbor_id)
-
-            if neighbor:
-                neighbor.alerts.append(f"Warning: Nearby infection from {plot.id} ({plot.infection_type})")
-
-
-    ## LAYERED APPROACH (if we need to prevent user from adding crops to other plots in the garden)
-    ## Okay, we need so, but LAYERED APPROACH VS SMART PLOTS. Smart plot it is
-
 
 garden = Garden(150,60).build()
-garden.cad_render()
+#garden.cad_render()
 
 admin = Admin(100,"Garden Admin")
 garden.members[100] = admin
@@ -250,37 +185,36 @@ Mina.add_credits(200)
 
 
 ### RENT TEST
-# garden.apply(Fouad, garden.plots[1].id,0.5,False)
-# garden.apply(Mina, garden.plots[1].id,1)
-
+# garden.rental_service.apply(Fouad, garden.plots[1],share=0.5,auto_renew=False)
+# garden.rental_service.apply(Mina, garden.plots[1],share=1)
+#
 # print(garden.plots[1].waitlist)
 # garden.audit_rent_plots()
-
+#
 # print(garden.plots[1].get_owners())
 # garden.audit_rental_end()
 # print(garden.plots[1].get_owners())
-
+#
 
 ### Planting Test
-
+#
 # my_plot = garden.plots[1]
-
-# garden.apply(Fouad, my_plot.id,0.5)
-# garden.apply(Mina, my_plot.id,0.5)
+#
+# garden.rental_service.apply(Fouad, my_plot,share=0.5)
+# garden.rental_service.apply(Mina, my_plot,share=0.5)
 # garden.audit_rent_plots()
-
+#
 # result = my_plot.add_crop(Fouad,"tomato")
 # my_plot.add_crop(Mina,"tomato")
 # my_plot.add_crop(Mina,"tomato")
-
+#
 # my_plot.add_fertilizer(Fouad, "organic")
-# my_plot.report_infection("infection type", garden.time_provider.now())
-
+# garden.plot_service.report_infection(my_plot, "infection type", garden.time_provider.now())
+#
 # my_plot.generate_watering_schedule()
 # my_plot.generate_winter_tasks()
-
+#
 # print(my_plot.neighbors)
-# garden.alert_neighbors(my_plot.id)
 # print(garden.plots[2].alerts)
 # print(garden.plots[5].alerts)
 # print(garden.plots[6].alerts)
@@ -401,65 +335,6 @@ Mina.add_credits(200)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Fouad = garden.join_member("Fouad Ahmed Fouad")
-# Mina = garden.join_member("Mina")
-# David = garden.join_member("David")
-# Ria = garden.join_member("Ria")
-# Saged = garden.join_member("Saged")
-# Steven = garden.join_member("Steven")
-
-
-# plot1 = garden.plots[1]
-# plot2 = garden.plots[2]
-# plot3 = garden.plots[3]
-
-
-# garden.apply(Fouad, plot1.id, 1)
-# garden.apply(Mina, plot1.id, 1)
-
-# garden.audit_rental_alert()
-# garden.audit_rental_end()
-# garden.audit_rent_plots()
-
-
-
-# # print("\n--- Soil State Test ---")
-
-# garden.add_crop(Mina, plot1.id, "carrot")
-# garden.add_crop(Mina, plot1.id, "carrot")
-# garden.add_crop(Mina, plot1.id, "carrot") ## soil state depleted
-
-# garden.add_fertilizer(Mina, plot1.id,"organic")  ## recovering the soil
-
-
-# garden.new_crop(Mina, plot1.id, "tomato")
-
-# garden.report_infection(Mina, plot1.id, "potato_blight", datetime.now())
-
-
-
-# ## audit
-# garden.generate_watering_schedule(Mina, plot1.id)
-# garden.propagate_infections(Mina)
-# garden.seasonal_update(Mina)
-
-
-## Admin
-
 # ## The system checks plots rentals everyday, the application is satisfied after 24 hours
 # ## if the plot is available and all requirments are satasifed (eg., enough credits)
 # ## the plot is rented, Otherwise the member is added to season waitlist that will be proccessed
@@ -470,32 +345,11 @@ Mina.add_credits(200)
 # garden.audit_rent_plots()
 
 
-# ## Resolve penality routine
-
-# #### Bank
-
-# ## Remove expired routine, and reorder inventory
+## Resolve penality routine
 
 
-# print(garden.volunteer_system.complete_shift(admin, admin.shifts_ids[0]).status)
+## Remove expired routine, and reorder inventory
 
 
-# ### Audit for updating ledger every month
-
-
-# ## Member
-
-# # Credits
-# Fouad.add_credits(200)
-
-
-
-# ## Fouad Choose plot0 and apply for rent
-# plot0 = garden.plots[1]
-# garden.apply(Fouad,plot0.id, share=1)
-# garden.apply(Mina, plot0.id, share=1)
-
-
-
-
+### Audit for updating ledger every month
 

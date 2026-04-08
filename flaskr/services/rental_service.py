@@ -116,3 +116,65 @@ class RentalService:
         rental.participants.append(participant)
 
         return RentalResult(RentalStatus.SUCCESS, rental)
+
+
+
+    def apply(self, member, plot, share=1.0, auto_renew=False):
+
+        if member is None:
+            raise MemberNotFoundError("Member does not exist")
+
+        if plot is None:
+            raise PlotNotFoundError("Plot does not exist")
+
+
+        application = Application(member, plot, share, auto_renew)
+        plot.waitlist.append(application)
+
+        return application
+
+    
+    def end_rentals(self, plot, new_season):
+        old_rental = plot.rental
+        plot.rental = None
+        ## Renew autos
+
+        plot.waitlist = []
+        for p in old_rental.participants:
+            if p.auto_renew:
+                self.apply(p.member, plot.id,p.share,p.auto_renew)
+            else:
+                p.status = "Terminated"
+        if plot.waitlist:
+            self.process_waitlist(plot,plot.waitlist, new_season) 
+
+        ## Rent the rest
+        plot.season_waitlist.sort(key=lambda app: app.score, reverse=True)            
+
+        self.process_waitlist(plot, plot.season_waitlist, new_season)
+        plot.season_waitlist = []
+
+        old_rental.status = "Expired"
+        plot.history_of_rentals.append(old_rental)
+
+
+
+    def rent_plots(self, plot, current_season):
+        plot.season_waitlist.sort(key=lambda app: app.score, reverse=True)
+        self.process_waitlist(plot,plot.waitlist, current_season)
+        plot.waitlist = []
+
+
+    def alert_rentals(self,plot):  
+        for p in plot.rental.participants: 
+            if p.auto_renew:
+                p.status = "ExpiringSoon" # check your credits for renewal
+            else:
+                p.status = "PendingTermination" 
+
+
+
+    def process_waitlist(self, plot, waitlist, season):
+        for app in waitlist:
+            self._rent_plot(plot,app.member,season,app) 
+
