@@ -2,7 +2,6 @@ from datetime import timedelta
 import uuid
 
 
-# Task
 class Task:
     def __init__(self, name, difficulty_score, category):
         self.name = name
@@ -10,7 +9,6 @@ class Task:
         self.category = category  # heavy / light / admin
 
 
-# Assignment 
 class VolunteerAssignment:
     def __init__(self, user_id, shift_id, role, deadline):
         self.user_id = user_id
@@ -23,7 +21,6 @@ class VolunteerAssignment:
     def complete_assignment(self):
         self.status = "completed"
 
-# Shift
 class Shift:
     def __init__(self, start_date, end_date):
         self.id = str(uuid.uuid4())
@@ -38,7 +35,6 @@ class Shift:
         self.tasks.append(task)
 
 
-# Ledger (Mandatory Hours)
 class ServiceLedger:
     def __init__(self):
         self.records = {}
@@ -82,5 +78,13 @@ class SwapRequest:
         self.requester_id = requester_id
         self.target_id = target_id
         self.shift_id = shift_id
-        self.status = "pending"  # pending, approved, rejected
+        self.status = "pending"  
 
+
+class WeatherService:
+    def get_weather(self, date, location=None):
+        """
+        replace with real API later.
+        """
+        # simulate
+        return "heavy_rain"  

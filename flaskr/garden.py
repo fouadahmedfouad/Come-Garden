@@ -267,42 +267,36 @@ Mina.add_credits(200)
 #
 
 
-
-
 ### Volunteer Test
 
-# shift = garden.volunteer_system.add_shift(admin, datetime.now(), duration_days=15)
+# ## add shift & autmoatically check weather
+# shift_result = garden.volunteer_system.add_shift(admin, datetime.now(), duration_days=15)
 #
 # admin.shifts[0].add_task("Turn Compost",9,"heavy")
 # admin.shifts[0].add_task("Turn Compost",9,"heavy")
-
+#
 # print(admin.shifts)
 # print(admin.shifts[0].tasks)
-
-# weather = "heavy_rain"
-# print(garden.volunteer_system.check_weather(admin, admin.shifts[0],weather).start_date)
 #
 # members = [Fouad, Saged]
 # garden.volunteer_system.assign(admin,admin.shifts[0],members)
 #
-#
 # print("Fouad's tasks", Fouad.tasks)
 # print("Saged's tasks", Saged.tasks)
-
+#
 # garden.volunteer_system.complete_shift(admin, admin.shifts[0])
-# print(shift.status)
-
+# print(shift_result.shift.status)
+#
 # Fouad.tasks[0].complete_assignment()
 # print(Fouad.tasks[0].deadline)
 #
-
-## Fouad requests a swap
+#
+# # Fouad requests a swap
 # print(garden.volunteer_system.request_swap(Fouad, Saged, Saged.tasks[0]))
-
-## Saged Approves or Reject
+#
+# # Saged Approves or Reject
 # print(garden.volunteer_system.reject_swap(Saged, Saged.swap_reqs[0]))
 # print(Fouad.sent_swap_reqs[0].status)
-
 
 
 
