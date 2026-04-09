@@ -1,4 +1,6 @@
+from datetime import timedelta
 import uuid
+
 
 # Task
 class Task:
@@ -10,24 +12,29 @@ class Task:
 
 # Assignment 
 class VolunteerAssignment:
-    def __init__(self, user_id, shift_id, role):
+    def __init__(self, user_id, shift_id, role, deadline):
         self.user_id = user_id
         self.shift_id = shift_id
         self.role = role
         self.status = "assigned"
+        self.deadline = deadline
         self.hours = 0
-
+    
+    def complete_assignment(self):
+        self.status = "completed"
 
 # Shift
 class Shift:
-    def __init__(self, date):
+    def __init__(self, start_date, end_date):
         self.id = str(uuid.uuid4())
-        self.date = date
+        self.start_date = start_date
+        self.end_date = end_date
         self.tasks = []
         self.assignments = []
         self.status = "scheduled"
 
-    def add_task(self, task):
+    def add_task(self, task_name, difficulity_score, category):
+        task = Task(task_name, difficulity_score, category)
         self.tasks.append(task)
 
 

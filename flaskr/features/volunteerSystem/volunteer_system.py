@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 import uuid
 
 
@@ -10,12 +10,10 @@ from features.volunteerSystem.volunteer_system_info import (
     SwapRequest
 )
 
-# Volunteer System
 class VolunteerSystem:
     def __init__(self):
-        self.member_contribution = {} # {member_id: (total_volunteer_hours,total_heavy_hours)}
+        self.member_contribution = {} 
         self.shifts = {}
-        self.swap_requests = []
         self.ledger = ServiceLedger()
 
     def add_member(self, member_id, required_hours=10):
@@ -25,106 +23,119 @@ class VolunteerSystem:
             "heavy_hours": 0
         }
 
-    def update_ledger(self, member_id, required_hours=10):
-        self.ledger.update_user(member_id, required_hours)
-    
-    def add_shift(self, user, date):
+    def add_shift(self, user, start_date, duration_days):
         # admin
-        shift = Shift(date)
+        start_date = start_date.date()
+        end_date = start_date + timedelta(days=duration_days)
+        shift = Shift(start_date, end_date)
+
         self.shifts[shift.id] = shift
-        user.shifts_ids.append(shift.id)
+        user.shifts.append(shift)
         return shift
 
-
-    def add_task(self, user, shift_id, task_name,difficulty_score, category):
+    def assign(self, user, shift, members):
         # admin
-
-        task = Task(task_name, difficulty_score, category)
-        shift = self.shifts.get(shift_id)
-
-        if shift:
-            shift.tasks.append(task)
-            return True
-        return False
-    
-    def add_task_to_shift(self,user, task, shift_id):
-        shift = self.shifts.get(shift_id)
-        
-        if shift:
-            shift.add_task(task)
-            return True
-
-        return False
-
-    def assign_members_to_shift(self, user , shift_id, members):
-        shift = self.shifts.get(shift_id)
 
         if not shift:
             return None
 
-        for m in members:
-            m.shifts_ids.append(shift_id)
-
-
-
-        for m in members:
-            if m.id not in self.member_contribution:
-                self.member_contribution[m.id] = {
-                    "total_hours": 0,
-                    "heavy_hours": 0
-                }
+        # Ensure all members have a contribution record
+        for member in members:
+            self.member_contribution.setdefault(member.id, {
+                "total_hours": 0,
+                "heavy_hours": 0
+            })
 
         # Sort members by least heavy work
         sorted_members = sorted(
             members,
             key=lambda m: self.member_contribution[m.id]["heavy_hours"]
         )
-    
-        heavy_tasks = [t for t in shift.tasks if t.category == "heavy"]
-    
-        assignments = []
-    
-        # Assign heavy tasks first
-        for i in range(len(heavy_tasks)):
-            if i < len(sorted_members):
-                assignments.append(
-                    VolunteerAssignment(sorted_members[i].id, shift.id, "heavy")
-                )
-    
-        # Remaining members → light tasks
-        for m in sorted_members[len(heavy_tasks):]:
-            assignments.append(
-                VolunteerAssignment(m.id, shift.id, "light")
-            )
-    
-        shift.assignments = assignments
-        return assignments 
 
-    def complete_shift(self, user, shift_id):
-        # admin 
-        shift = self.shifts.get(shift_id)
+        # Separate heavy and light tasks
+        heavy_tasks = [t for t in shift.tasks if t.category == "heavy"]
+        light_tasks_count = len(shift.tasks) - len(heavy_tasks)
+
+        assignments = []
+
+        # Assign heavy tasks
+        for member, task in zip(sorted_members, heavy_tasks):
+            assignment = VolunteerAssignment(member.id, shift.id, task.name, shift.end_date)
+            assignments.append(assignment)
+
+            member.tasks.append(assignment)
+
+        # Assign remaining members to light tasks
+        remaining_members = sorted_members[len(heavy_tasks):]
+        for member in remaining_members[:light_tasks_count]:
+            assignment = VolunteerAssignment(member.id, shift.id, task.name, shift.end_date)
+            assignments.append(assignment)
+            member.tasks.append(assignment)
+
+        shift.assignments = assignments
+        return assignments    
+
+    def complete_shift(self, user, shift):
+        """
+        Complete a shift immediately (admin-triggered).
+        Marks all assignments as completed and updates member contributions.
+        """
         if not shift:
             return None
 
         for assignment in shift.assignments:
-            assignment.status = "completed"
-            assignment.hours = 2  # example
-    
-            # Update totals
-            self.member_contribution[assignment.user_id]["total_hours"] += assignment.hours
-    
-            if assignment.role == "heavy":
-                self.member_contribution[assignment.user_id]["heavy_hours"] += 1
-    
-            # Update ledger
-            self.ledger.log_hours(assignment.user_id, assignment.hours)
-    
+            if getattr(assignment, "status", None) != "completed":
+                assignment.status = "completed"
+                # assume 2 hours per assignment
+                assignment.hours = getattr(assignment, "hours", 2)
+
+                # Update totals
+                self.member_contribution[assignment.user_id]["total_hours"] += assignment.hours
+                if assignment.role == "heavy":
+                    self.member_contribution[assignment.user_id]["heavy_hours"] += 1
+
+                # Update ledger
+                self.ledger.log_hours(assignment.user_id, assignment.hours)
+
         shift.status = "completed"
         return shift
 
-    def check_weather(self,user, shift_id, weather):
+
+    def audit_all_shifts(self, user):
+        """
+        Daily audit: checks all shifts against end_date + grace_days.
+        Reports incomplete assignments without completing them.
+        """
+        today = datetime.now().date()
+        all_reports = []
+
+        for shift in self.shifts:
+            end_date = shift.end_date
+
+            if today >= end_date:
+                incomplete_assignments = [
+                    a for a in shift.assignments if getattr(a, "status", None) != "completed"
+                ]
+                if incomplete_assignments:
+                    report = {
+                        "shift_id": shift.id,
+                        "incomplete_assignments": [
+                            {"user_id": a.user_id, "role": a.role} for a in incomplete_assignments
+                        ]
+                    }
+                    all_reports.append(report)
+                    shift.status = "incomplete"
+                else:
+                    shift.status = "completed"
+
+        if all_reports:
+            print("Incomplete Assignments Report:", all_reports)
+        # self.notify_admin(all_reports) 
+
+
+    def check_weather(self,user, shift, weather):
         #admin
-        shift = self.shifts.get(shift_id)
+        """current: Delay one day if the weather of today is not good """
 
         if not shift:
             return 
@@ -132,7 +143,7 @@ class VolunteerSystem:
         if weather in ["heavy_rain", "extreme_heat"]:
             shift.status = "reschduled"
 
-            shift.date = shift.date + timedelta(days=1) 
+            shift.start_date = shift.start_date + timedelta(days=1) 
             return shift 
 
     def get_member_history(self, user_id):
@@ -143,7 +154,7 @@ class VolunteerSystem:
                 if a.user_id == user_id:
                     history.append({
                         "shift": shift.id,
-                        "date": shift.date,
+                        "date": shift.start_date,
                         "role": a.role,
                         "status": a.status
                     })
@@ -151,10 +162,15 @@ class VolunteerSystem:
         return history
 
 
+    def update_ledger(self, member_id, required_hours=10):
+        self.ledger.update_user(member_id, required_hours)
+    
 
 
-    def request_swap(self, user, target, shift_id):    
-        shift = self.shifts.get(shift_id)
+    def request_swap(self, user, target, assignment):    
+
+        # find the shift
+        shift = self.shifts.get(assignment.shift_id)
 
         if not shift:
             return None
@@ -165,41 +181,36 @@ class VolunteerSystem:
             print("Requister not assigned")
             return None
     
-        swap = SwapRequest(user.id, target.id, shift_id)
-        self.swap_requests.append(swap) 
-        target.swaps_req_ids.append(swap.request_id)
+        swap = SwapRequest(user.id, target.id, shift.id)
+
+        user.sent_swap_reqs.append(swap) 
+        target.swap_reqs.append(swap)
 
         return swap   
 
 
 
-    def approve_swap(self, user, request_id):
-        swap = next((r for r in self.swap_requests if r.request_id == request_id), None)
+    def approve_swap(self, user, request):
+        shift = self.shifts.get(request.shift_id)
 
-        if not swap or swap.status != "pending":
-            return False
-
-        shift = self.shifts.get(swap.shift_id) 
         if not shift:
             return False
     
         # Find assignment of requester
-        assignment = next((a for a in shift.assignments if a.user_id == swap.requester_id), None)
+        assignment = next((a for a in shift.assignments if a.user_id == request.requester_id), None)
         if not assignment:
             return False
     
         # Perform swap (replace user)
-        assignment.user_id = swap.target_id
-        user.swaps_req_ids.remove(request_id)
-    
-        swap.status = "approved"
+        assignment.user_id = request.target_id
+
+        request.status = "approved"
         return True
 
-    def reject_swap(self, request_id):
-        swap = next((r for r in self.swap_requests if r.request_id == request_id), None)
-        if not swap:
+    def reject_swap(self, user, request):
+        if not request:
             return False
     
-        swap.status = "rejected"
+        request.status = "rejected"
         return True
    

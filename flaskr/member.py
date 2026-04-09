@@ -14,8 +14,9 @@ class Member:
         self.inventory = []
         self.bookings = []
 
-        self.shifts_ids = []
-        self.swaps_req_ids = []
+        self.tasks = []
+        self.swap_reqs = []
+        self.sent_swap_reqs = []
 
         self.listings_ids = []
         self.questions_ids = []
@@ -59,6 +60,7 @@ class Member:
 class Admin(Member):
     def __init__(self, id, name):
         super().__init__(id, name)
+        self.shifts = []
 
     @property
     def is_admin(self):
