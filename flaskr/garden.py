@@ -40,34 +40,7 @@ class Garden:
         self.volunteer_system = VolunteerSystem()
         self.market_place = Marketplace()
       
- #    def cad_render(self):
- #        try: 
- #            from ocp_vscode  import show
- #            from cadquery import cq
- #    
- #        except ImportError:
- #            raise RuntimeError("cad_render requires cadquery and ocp_vscode installed")
- #    
- #        large_pts = self.large_pts
- #        small_pts = self.small_pts
- #    
- #        alt_w = self.allotment_width
- #        alt_h = self.allotment_height
- #        
- #        lw, lh = PLOTS["large"]["w"], PLOTS["large"]["h"]
- #        sw, sh = PLOTS["small"]["w"], PLOTS["small"]["h"] 
- #    
- #        alt_thickness = 1
- #        plt_thickness = 3
- #        
- #        allotment = cq.Workplane("front").rect(alt_w,alt_h).extrude(alt_thickness)
- #        if large_pts:
- #            allotment = allotment.pushPoints(large_pts).rect(lw, lh).extrude(plt_thickness)
- #        if small_pts:
- #            allotment = allotment.pushPoints(small_pts).rect(sw, sh).extrude(plt_thickness)
- # 
- #        show(allotment, reset_camera=True)        
- #
+
 
     def _generate_member_id(self):
         return len(self.members) + 1
@@ -124,8 +97,9 @@ class Garden:
        today = self.time_provider.now() 
        current_season = self.get_current_season()
        last_day = current_season.last_day()
-
-       if today < last_day:
+       
+       # close the window before the end of the season of 15 days
+       if today < last_day - timedelta(days=15):
            for plot in self.plots.values():  
             if plot.is_available():
                 self.rental_service.rent_plots(plot, current_season)
@@ -163,6 +137,34 @@ class Garden:
     def add_plot(self,plot):
         self.plots[plot.id] = plot
 
+ #    def cad_render(self):
+ #        try: 
+ #            from ocp_vscode  import show
+ #            from cadquery import cq
+ #    
+ #        except ImportError:
+ #            raise RuntimeError("cad_render requires cadquery and ocp_vscode installed")
+ #    
+ #        large_pts = self.large_pts
+ #        small_pts = self.small_pts
+ #    
+ #        alt_w = self.allotment_width
+ #        alt_h = self.allotment_height
+ #        
+ #        lw, lh = PLOTS["large"]["w"], PLOTS["large"]["h"]
+ #        sw, sh = PLOTS["small"]["w"], PLOTS["small"]["h"] 
+ #    
+ #        alt_thickness = 1
+ #        plt_thickness = 3
+ #        
+ #        allotment = cq.Workplane("front").rect(alt_w,alt_h).extrude(alt_thickness)
+ #        if large_pts:
+ #            allotment = allotment.pushPoints(large_pts).rect(lw, lh).extrude(plt_thickness)
+ #        if small_pts:
+ #            allotment = allotment.pushPoints(small_pts).rect(sw, sh).extrude(plt_thickness)
+ # 
+ #        show(allotment, reset_camera=True)        
+ #
 
 garden = Garden(150,60).build()
 #garden.cad_render()
@@ -184,7 +186,7 @@ Mina.add_credits(200)
 
 
 
-### RENT TEST
+## RENT TEST
 # garden.rental_service.apply(Fouad, garden.plots[1],share=0.5,auto_renew=False)
 # garden.rental_service.apply(Mina, garden.plots[1],share=1)
 #
@@ -194,7 +196,7 @@ Mina.add_credits(200)
 # print(garden.plots[1].get_owners())
 # garden.audit_rental_end()
 # print(garden.plots[1].get_owners())
-#
+
 
 ### Planting Test
 #
@@ -224,42 +226,45 @@ Mina.add_credits(200)
 
 ### Tool library Test
 
-## admin add tools
+# # admin add tools
 # garden.tool_library.add_tool(admin, "Rototiller", usage_status="high", maintenance_threshold_hours=5)
-
+#
 # # Fouad books a tool
-# booking = garden.tool_library.book_tool(Fouad, "Rototiller", duration_hours=10)
-# booking2 = garden.tool_library.book_tool(Steven, "Rototiller", duration_hours=10)
-
-
-# # Fouad returns the tool 
-
-# garden.tool_library.return_tool(Fouad.booking_ids[0], cleaned=True)
-# print(garden.tool_library.tools[booking.booking.tool_name].status)
-# garden.tool_library.return_tool(Steven.booking_ids[0], cleaned=True)
-# print(garden.tool_library.tools[booking.booking.tool_name].status)
-
+# garden.tool_library.book_tool(Fouad, "Rototiller", duration_hours=10)
+#
+# # Steven try to book the same tool
+# garden.tool_library.book_tool(Steven, "Rototiller", duration_hours=10)
+#
+#
+# # Fouad returns the tool (the waitlist automatically proccessed and Steven gets the tool)
+# garden.tool_library.return_tool(Fouad.bookings[0], cleaned=True)
+# # Steven returns the tool (the waitlist automatically proccessed and the tool now is available)
+# garden.tool_library.return_tool(Steven.bookings[0], cleaned=True)
+#
 # # Fouad report damage 
-# garden.tool_library.report_damage(Fouad.booking_ids[0], severity="medium")
-
+# garden.tool_library.report_damage(Fouad.bookings[0], severity="medium")
+# print(vars(Fouad.bookings[0]))
 
 
 ### Bank Test
 
 # ## admin add inventory itmes
-# print(garden.seed_bank.add_inventory_item(admin, "Fertilizer", quantity=5, reorder_threshold=10))
-
+# garden.seed_bank.add_inventory_item(admin, "Fertilizer", quantity=5, reorder_threshold=10)
+#
 # # admin does checks
-# print(garden.seed_bank.check_inventory_alerts(admin))
-# print(garden.seed_bank.check_seed_health(admin))
-
-
-# # Fouad deposit high quaility tomato
-# print(garden.seed_bank.deposit(Steven, "tomato", quantity=10, viability=90, origin="Roma", gt_flag=True, age=5))
-
-# # Fouad withdraw tomato
-# print(garden.seed_bank.withdraw(Steven,"tomato", quantity=5))
-
+# garden.seed_bank.check_inventory_alerts(admin)
+# garden.seed_bank.check_seed_health(admin)
+#
+#
+# # Steven deposit high quaility tomato
+# garden.seed_bank.deposit(Steven, "tomato", quantity=10, viability=90, origin="Roma", gt_flag=True, age=5)
+#
+# # Steven withdraw tomato
+# garden.seed_bank.withdraw(Steven,"tomato", quantity=5)
+#
+# # debug
+# garden.seed_bank.print_state()
+#
 
 
 

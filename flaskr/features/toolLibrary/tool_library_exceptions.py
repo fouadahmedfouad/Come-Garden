@@ -54,5 +54,3 @@ class AuthorizationError(ToolLibraryError):
     def __init__(self, user_id, action):
         super().__init__(f"User {user_id} is not authorized to perform '{action}'.")
 
-
-

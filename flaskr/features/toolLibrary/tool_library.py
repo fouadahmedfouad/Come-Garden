@@ -11,7 +11,7 @@ from features.toolLibrary.tool_library_exceptions import (
     BookingNotFoundError,
     ToolStateError,
     InvalidDamageSeverityError,
-    AuthorizationError
+    AuthorizationError,
 )
 from features.toolLibrary.tool_library_info import (
     Tool,
@@ -20,13 +20,16 @@ from features.toolLibrary.tool_library_info import (
 )
 
 from features.toolLibrary.tool_library_results import (
-    BookingResult
+    BookingResult,
+    OperationResult,
+    PenaltyResult,
+    ToolResult
 )
 
 class ToolLibrary:
     def __init__(self):
         self.tools = {}
-        self.bookings = []
+        self.bookings = {}
         self.penalties = {}
         self.tasks = []
 
@@ -50,23 +53,20 @@ class ToolLibrary:
             if not tool:
                 raise ToolNotFoundError(tool_name)
     
-            # --- Business rules ---
             if self.has_pending_penalty(user.id):
                 raise UserPenaltyError(user.id)
     
             start_time = datetime.now()
             end_time = start_time + timedelta(hours=duration_hours)
     
-            # --- Booking logic ---
             if self.is_tool_available(tool_name, start_time, end_time):
                 booking = Booking(tool.name, user.id, start_time, end_time)
     
-                self.bookings.append(booking)
+                self.bookings[booking.id] = booking
                 tool.check_out()
     
-                # Attach booking safely
-                user.booking_ids = getattr(user, "booking_ids", [])
-                user.booking_ids.append(booking.id)
+                user.bookings = getattr(user, "bookings", [])
+                user.bookings.append(booking)
     
                 return BookingResult(success=True, booking=booking)
 
@@ -80,77 +80,69 @@ class ToolLibrary:
             return BookingResult(success=False, error=str(e))
     
         except Exception as e:
-            # Unexpected system errors
             return BookingResult(success=False, error=f"[Critical] Unexpected failure: {e}")
 
-    def return_tool(self, booking_id, cleaned=True) -> bool:
+    def return_tool(self, booking, cleaned=True) -> bool:
+
         """
         Handles tool return, penalties, and booking status updates.
         """
         try:
 
-            booking = next((b for b in self.bookings if b.id == booking_id), None)
-            if not booking:
-                raise BookingNotFoundError(booking_id)
+            if not self.bookings.get(booking.id):
+                raise BookingNotFoundError(booking.id)
     
             tool = self.tools.get(booking.tool_name)
             if not tool:
                 raise ToolStateError(booking.tool_name, "Tool not found in registry.")
     
-            actual_return_time = datetime.now()
+            actual_return_date = datetime.now()
             required_return_time = booking.end_time
+
+            booking.actual_return_date = actual_return_date
     
-            # --- Penalty handling ---
             if not cleaned:
                 penalty = Penalty(booking.user_id, booking.id, "service", 2)
                 self.penalties.append(penalty)
                 booking.penalty_id = penalty.id
     
-            # --- Status update ---
-            if actual_return_time > required_return_time:
+            if actual_return_date > required_return_time:
                 booking.status = "overdue"
             else:
                 booking.status = "completed"
     
-            hours_used = (actual_return_time - booking.start_time).total_seconds() / 3600
+            hours_used = (actual_return_date - booking.start_time).total_seconds() / 3600
     
             tool.return_tool(hours_used)
             self.process_waitlist(tool.name)
 
-            return True
+            return OperationResult(success=True)
     
         except ToolLibraryError as e:
-            print(f"[ToolLibraryError] {e}")
-            return False
-    
+            return OperationResult(success=False, error=str(e))
+
         except Exception as e:
-            print(f"[Critical] Unexpected failure during tool return: {e}")
-            return False   
-
-
-    def report_damage(self, booking_id, severity="medium") -> Penalty:
+            return OperationResult(success=False, error=f"[Critical] Unexpected failure: {e}")
+   
+    def report_damage(self, booking, severity="medium") -> Penalty:
         """
         Reports damage for a booking and applies penalties based on severity.
         """
         try:
-            # --- Validate booking ---
-            booking = next((b for b in self.bookings if b.id == booking_id), None)
-            if not booking:
-                raise BookingNotFoundError(booking_id)
+            if not self.bookings.get(booking.id):
+                raise BookingNotFoundError(booking.id)
     
             tool = self.tools.get(booking.tool_name)
             if not tool:
                 raise ToolStateError(booking.tool_name, "Tool not found in registry.")
     
-            # --- Validate severity ---
             valid_severities = {"low", "medium", "high"}
             if severity not in valid_severities:
                 raise InvalidDamageSeverityError(severity)
     
-            # --- Business logic ---
             if severity == "low":
                 # Natural wear — no penalty
-                return None
+                return PenaltyResult(success=True, penalty=None)
     
             elif severity == "medium":
                 penalty = Penalty(booking.user_id, booking.id, "service", 3)
@@ -160,53 +152,46 @@ class ToolLibrary:
                 penalty = Penalty(booking.user_id, booking.id, "fine", 50)
                 tool.decommission()
     
-            # --- Apply penalty ---
             self.penalties.setdefault(booking.user_id, []).append(penalty)
             booking.penalty_id = penalty.id
-    
-            return penalty
+
+            return PenaltyResult(success=True, penalty=penalty)
 
         except ToolLibraryError as e:
-            print(f"[ToolLibraryError] {e}")
-            return None
-    
+            return PenaltyResult(success=False, error=str(e))
+
         except Exception as e:
-            print(f"[Critical] Unexpected failure during damage report: {e}")
-            return None   
+            return PenaltyResult(success=False, error=f"[Critical] Unexpected failure: {e}")
 
     def add_tool(self, user, tool_name, usage_status="low", maintenance_threshold_hours=5) -> Tool | None:
         """
         Admin-only: Adds a new tool to the system.
         """
         try:
-            # --- Authorization ---
             if not user or not user.is_admin:
                 raise AuthorizationError(getattr(user, "id", None), "add_tool")
     
-            # --- Validation ---
             if not tool_name or not isinstance(tool_name, str):
-                raise ValueError("Tool name must be a valid string.")
-    
+               raise ToolNotFoundError(tool_name)
+
             if tool_name in self.tools:
-                raise ValueError(f"Tool '{tool_name}' already exists.")
-    
-            # --- Create tool ---
+               raise ToolStateError(tool_name, "Tool already exists.")
+
             tool = Tool(tool_name, usage_status, maintenance_threshold_hours)
             self.tools[tool.name] = tool
     
-            return tool
+            return ToolResult(success=True, tool=tool)
 
         except ToolLibraryError as e:
-            print(f"[ToolLibraryError] {e}")
-            return None
-    
+            return ToolResult(success=False, error=str(e))
+
         except Exception as e:
-            print(f"[Critical] Failed to add tool: {e}")
-            return None 
+            return ToolResult(success=False, error=f"[Critical] Unexpected failure: {e}")
 
     def calculate_priority(self, user_id):
         base_score = 100
         user_penalties = self.penalties.get(user_id, [])
+        now = datetime.now()
     
         penalty_weight = {
             "service": 5,
@@ -219,65 +204,75 @@ class ToolLibrary:
             weight = penalty_weight.get(p.type, 10)
     
             # decay old penalties (for fairness)
-            days_ago = (datetime.now() - p.created_at).days if hasattr(p, "created_at") else 0
+            days_ago = (now - p.created_at).days if hasattr(p, "created_at") else 0
             
             if days_ago > 30:
-                weight *= 0.5  # older penalties matter less
+                weight *= 0.5  
     
             total_penalty_score += weight
     
-        score = base_score - total_penalty_score
-
-        return max(score, 0)
+        return max(base_score - total_penalty_score, 0)
 
 
     def is_tool_available(self, tool_name, requested_start,requested_end):
         tool = self.tools.get(tool_name)
 
-        if not tool or tool.status != "available":
+        if not tool:
+           raise ToolNotFoundError(tool_name)
+
+        if tool.status != "available":
             return False
 
-        for booking in self.bookings:
+        for booking in self.bookings.values():
             if booking.tool_name != tool_name:
                 continue
 
             if booking.status in {"active", "overdue"}:
-                # Check time overlap
                 if not (requested_end <= booking.start_time or requested_start >= booking.end_time):
                     return False
         return True
 
     def has_pending_penalty(self, user_id):
-        for p in self.penalties.get(user_id, []):
-            if p.status == "pending":
-                return True
-        return False
+        return any(p.status == "pending" for p in self.penalties.get(user_id, []))
 
     def process_waitlist(self, tool_name):
-        tool = self.tools.get(tool_name)
-    
-        if not tool or tool.status != "available" or not tool.waitlist:
-            return
-    
-        # Sort ONLY by score (highest first)
-        tool.waitlist.sort(key=lambda x: x[0], reverse=True)
-    
-        for i, (score, duration, user) in enumerate(tool.waitlist):
-    
-            if self.has_pending_penalty(user.id):
-                continue
-    
-            start_time = datetime.now()
-            end_time = start_time + timedelta(hours=duration)
-    
-            if not self.is_tool_available(tool_name, start_time, end_time):
-                continue
-    
-            booking = self.book_tool(user, tool_name, duration)
-    
-            tool.waitlist.pop(i)
-            return booking  
+        try:
+            tool = self.tools.get(tool_name)
 
+            if not tool: 
+                raise ToolNotFoundError(tool_name)
+        
+            if tool.status != "available" or not tool.waitlist:
+                return None
+        
+            # Sort by priority
+            tool.waitlist.sort(key=lambda x: x[0], reverse=True)
+        
+            start_time = datetime.now()
+            for i, (score, duration, user) in enumerate(tool.waitlist):
+        
+                if self.has_pending_penalty(user.id):
+                    continue
+        
+                end_time = start_time + timedelta(hours=duration)
+        
+                if not self.is_tool_available(tool_name, start_time, end_time):
+                    continue
+        
+                result = self.book_tool(user, tool_name, duration)
+
+                if result.success:
+                    tool.waitlist.pop(i)
+                    return result
+                    
+        
+            return None 
+
+        except ToolLibraryError:
+                return None
+
+        except Exception:
+            return None
 
     def daily_audit(self):
         """
@@ -286,4 +281,8 @@ class ToolLibrary:
         """
         for tool_name, tool in self.tools.items():
             if tool.status == "available" and tool.waitlist:
-                self.process_waitlist(tool_name)
+                try:
+                    self.process_waitlist(tool_name)
+                except Exception:
+                    # optionally log here
+                    pass

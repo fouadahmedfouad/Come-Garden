@@ -10,8 +10,9 @@ class Member:
         self.contribution_points = 0 
         
         self.rental_history = []
-        self.booking_ids = []
+
         self.inventory = []
+        self.bookings = []
 
         self.shifts_ids = []
         self.swaps_req_ids = []
