@@ -6,7 +6,7 @@ class Tool:
         self.name = tool_name
         self.status = "available"
         self.usage_status = usage_status
-        self.maintenance_threshold = maintenance_threshold_hours
+        self.maintenance_threshold_hours = maintenance_threshold_hours
         self.total_usage_hours = 0
         self.waitlist = []
         self.resources = []
@@ -19,7 +19,7 @@ class Tool:
     def return_tool(self, hours_used):
         self.total_usage_hours += hours_used
 
-        if self.total_usage_hours >= self.maintenance_threshold:
+        if self.total_usage_hours >= self.maintenance_threshold_hours:
             self.status = "in_repair"
         else:
             self.status = "available"

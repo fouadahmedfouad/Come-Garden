@@ -10,29 +10,202 @@ from features.marketPlace.market_place_info import (
 )
 
 
-# Marketplace
+from features.marketPlace.market_place_exceptions import *
+from features.marketPlace.market_place_results import *
+from features.marketPlace.market_place_events import *
+
+
 class Marketplace:
     def __init__(self):
         self.listings = {}
-        self.trades = {}
-        self.ratings = []
-
         self.questions = {}
-        self.answers = {}
+
 
         self.member_karam = {}
         self.member_credits = {}
+        
+        # self.ratings = [] 
+        self.events = []
 
-    # Listing
-    def create_listing(self, user, item, quantity, listing_type="normal", request=None):
-        listing = Listing(user.id, item, quantity, listing_type, request)
-        user.listings_ids.append(listing.id) 
-        self.apply_allergy_flags(listing)
-        self.listings[listing.id] = listing
 
-        return listing
+    def _emit_event(self, event):
+        self.events.append(event)
+        self._handle_event(event)
 
-    def apply_allergy_flags(self, listing):
+    def _handle_event(self, event):
+        # Alerts
+
+
+        # Karma system
+        if event.type == "trade_completed":
+            listing = self.listings.get(event.data["listing_id"])
+            if listing and listing.type == "gift":
+                user_id = event.user_id
+                self.member_karam[user_id] = self.member_karam.get(user_id, 0) + 10
+
+        # Bounty reward
+        if event.type == "answer_accepted":
+            responder_id = event.data.get("responder_id")
+            bounty = event.data.get("bounty", 0)
+
+            self.member_credits[responder_id] = \
+                self.member_credits.get(responder_id, 0) + bounty  
+
+    def create_listing(self, user, item, quantity, listing_type="normal", request=None) -> ListingResult:
+        try:
+            if not user:
+                raise InvalidUserError(user)
+
+            listing = Listing(user.id, item, quantity, listing_type, request)
+
+            user.listings = getattr(user, "listings", [])
+            user.listings.append(listing)
+
+            self._apply_allergy_flags(listing)
+            self.listings[listing.id] = listing
+
+            self._emit_event(
+                ListingCreated(user.id, listing.id, item, quantity)
+            )
+            
+            return ListingResult(True, listing)
+
+        except MarketplaceError as e:
+            return ListingResult(False, error=str(e))
+        except Exception as e:
+            return ListingResult(False, error=f"[Critical] {e}")
+
+    def request_trade(self, user, listing) -> TradeResult:
+        try:
+            if not user:
+                raise InvalidUserError(user)
+
+            if not listing:
+                raise ListingNotFoundError(None)
+
+            if listing.status != "active":
+                raise TradeError("Listing not active")
+
+            if listing.type == "flash" and datetime.now() > listing.expires_at:
+                listing.status = "expired"
+                raise TradeError("Listing expired")
+
+            trade = Trade(listing.id, user.id)
+            listing.trades.append(trade)
+
+            self._emit_event(
+                TradeRequested(user.id, listing.id, trade.id)
+            )
+
+            return TradeResult(True, trade)
+
+        except MarketplaceError as e:
+            return TradeResult(False, error=str(e))
+        except Exception as e:
+            return TradeResult(False, error=f"[Critical] {e}")
+
+    def complete_trade(self, user, trade) -> TradeResult:
+        try:
+            if not trade:
+                raise TradeError("Invalid trade")
+
+            listing = self.listings.get(trade.listing_id)
+            if not listing:
+                raise ListingNotFoundError(trade.listing_id)
+
+            trade.status = "completed"
+            listing.status = "completed"
+
+            self._emit_event(
+                TradeCompleted(user.id, listing.id, trade.id)
+            )
+
+            return TradeResult(True, trade)
+
+        except MarketplaceError as e:
+            return TradeResult(False, error=str(e))
+        except Exception as e:
+            return TradeResult(False, error=f"[Critical] {e}")
+
+
+    def ask_question(self, user, content, bounty=0) -> QuestionResult:
+        try:
+            if not user:
+                raise InvalidUserError(user)
+
+            if user.credits < bounty:
+                raise QuestionError("Not enough credits")
+
+            q = Question(user.id, content, bounty)
+
+            user.questions = getattr(user, "questions", [])
+            user.questions.append(q)
+
+            user.credits -= bounty
+            self.questions[q.id] = q
+
+            self._emit_event(
+                QuestionAsked(user.id, q.id, bounty)
+            )
+
+            return QuestionResult(True, q)
+
+        except MarketplaceError as e:
+            return QuestionResult(False, error=str(e))
+        except Exception as e:
+            return QuestionResult(False, error=f"[Critical] {e}")
+
+    def answer_question(self, user, question, content) -> AnswerResult:
+        try:
+            if not question:
+                raise QuestionError("Question not found")
+
+            if question.status != "open":
+                raise QuestionError("Question not open")
+
+            ans = Answer(question.id, user, content)
+
+            question.answers.append(ans)
+
+            return AnswerResult(True, ans)
+
+        except MarketplaceError as e:
+            return AnswerResult(False, error=str(e))
+        except Exception as e:
+            return AnswerResult(False, error=f"[Critical] {e}")
+
+    def accept_answer(self, user, question, answer) -> AnswerResult:
+        try:
+            if not question or not answer:
+                raise AnswerError("Invalid question or answer")
+
+            answer.accepted = True
+            question.accepted_answer_id = answer
+            question.status = "resolved"
+
+            self._emit_event(
+                AnswerAccepted(
+                    user.id,
+                    answer.id,
+                    question.bounty
+                )
+            )
+
+            return AnswerResult(True, answer)
+
+        except MarketplaceError as e:
+            return AnswerResult(False, error=str(e))
+        except Exception as e:
+            return AnswerResult(False, error=f"[Critical] {e}")
+
+
+
+    #
+    # def rate_user(self, from_user_id, to_user_id, score, comment=""):
+    #     self.ratings.append(Rating(from_user_id, to_user_id, score, comment))
+
+ 
+    def _apply_allergy_flags(self, listing):
         allergens = {
             "tomato": "nightshade",
             "potato": "nightshade",
@@ -42,119 +215,13 @@ class Marketplace:
         if listing.item.lower() in allergens:
             listing.flags.append(allergens[listing.item.lower()])
 
-    # Trade
-    def request_trade(self, user, listing_id): 
-        listing = self.listings.get(listing_id)
-
-        if not listing or listing.status != "active":
-            return None
-
-        if listing.type == "flash" and datetime.now() > listing.expires_at:
-            listing.status = "expired"
-            return None
-
-        trade = Trade(listing.id, user.id)
-        self.trades[trade.id] = trade
-
-        return trade
-
-
-
-    
- 
-
-
-    def complete_trade(self, user, trade_id):
-        trade = self.trades.get(trade_id)
-        listing = self.listings.get(trade.listing_id)
-        
-
-        trade.status = "completed"
-        listing.status = "completed"
-
-        # Gift → karma
-        if listing.type == "gift":
-           self.member_karam[user.id] = self.member_karam.get(user.id, 0) + 10
-
-        return trade 
-
-    # Rating
-    def rate_user(self, from_user_id, to_user_id, score, comment=""):
-        self.ratings.append(Rating(from_user_id, to_user_id, score, comment))
-
-   
-
- 
-
-    # Advice (Q&A)
-    def ask_question(self, user, content, bounty=0):
-        q = Question(user.id, content, bounty)
-        user.questions_ids.append(q.id)
-        user.credits -= q.bounty
-        self.questions[q.id] = q
-
-        return q
-
-    def answer_question(self, user, question_id, content):
-        question = self.questions.get(question_id)
-
-        if not question or question.status != "open":
-            return None
-
-        ans = Answer(question_id, user, content)
-
-        question.answers.append(ans.id)
-        self.answers[ans.id] = ans
-
-        return ans
-
-    def accept_answer(self,user, question_id, answer_id):
-        question = self.questions.get(question_id)
-        answer = self.answers.get(answer_id)
-
-        if not question or not answer:
-            return False
-
-        # mark answer as accepted
-        answer.accepted = True
-        question.accepted_answer_id = answer_id
-
-        # # credit the responder
-        # self.member_credits[answer.responder_id] = self.member_credits.get(answer.responder_id,0) + question.bounty
-
-        # mark question as resolved
-        question.status = "resolved"
-        answer.responder.credits += question.bounty
-        
-        return answer
-
-
     def get_listings(self, user):
         return list(self.listings.values())
-
-    def get_trades_by_listing(self, user, listing_id): 
-        trades = []
-        for trade in self.trades.values():
-            if trade.listing_id == listing_id:
-                trades.append(trade)
-        return trades
-
-    def get_my_trades(self, user):
-        trades = []
-        for trade in self.trades.values():
-            if trade.buyer_id == user.id:
-                trades.append(trade)
-        return trades
-
+    
     def get_questions(self, user):
         return list(self.questions.values())
 
-    def get_answers_by_question(self, user, question_id):
-        q = self.questions.get(question_id)
-        result = []
-        for ans_id in q.answers:
-           result.append(self.answers[ans_id]) 
-        return result
+
 
     # def get_listings(self, status=None, listing_type=None, item=None):
     #     results = self.listings.values()
@@ -169,10 +236,4 @@ class Marketplace:
     #         results = filter(lambda l: l.item.lower() == item.lower(), results)
     
     #     return list(results)
-
-#     # Surplus Prediction
-# def predict_surplus(plot):
-#     if plot.size == "large" and plot.sun_profile.get("12pm", 0) == 1.0:
-#         return ["tomato", "zucchini"]
-#     return []
 

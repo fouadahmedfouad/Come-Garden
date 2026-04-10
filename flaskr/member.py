@@ -18,8 +18,11 @@ class Member:
         self.swap_reqs = []
         self.sent_swap_reqs = []
 
-        self.listings_ids = []
-        self.questions_ids = []
+        self.listings  = []
+        self.trades    = []
+        self.questions = []
+        
+        #TODO: Move all he creadits here in one place
 
     def add_rental(self,rental):
         self.rental_history.append(rental)

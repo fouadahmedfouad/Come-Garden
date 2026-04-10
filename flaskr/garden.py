@@ -186,7 +186,7 @@ Mina.add_credits(200)
 
 
 
-## RENT TEST
+## RENT TEST (Fouad)
 # garden.rental_service.apply(Fouad, garden.plots[1],share=0.5,auto_renew=False)
 # garden.rental_service.apply(Mina, garden.plots[1],share=1)
 #
@@ -224,29 +224,29 @@ Mina.add_credits(200)
 
 
 
-### Tool library Test
-
+### Tool library Test (Steven)
+#
 # # admin add tools
-# garden.tool_library.add_tool(admin, "Rototiller", usage_status="high", maintenance_threshold_hours=5)
+# print(garden.tool_library.add_tool(admin, "Rototiller", usage_status="high", maintenance_threshold_hours=5).success)
 #
 # # Fouad books a tool
-# garden.tool_library.book_tool(Fouad, "Rototiller", duration_hours=10)
+# print(garden.tool_library.book_tool(Fouad, "Rototiller", duration_hours=10).success)
 #
 # # Steven try to book the same tool
-# garden.tool_library.book_tool(Steven, "Rototiller", duration_hours=10)
+# print(garden.tool_library.book_tool(Steven, "Rototiller", duration_hours=10).success)
 #
 #
 # # Fouad returns the tool (the waitlist automatically proccessed and Steven gets the tool)
-# garden.tool_library.return_tool(Fouad.bookings[0], cleaned=True)
+# print(garden.tool_library.return_tool(Fouad.bookings[0], cleaned=True).success)
 # # Steven returns the tool (the waitlist automatically proccessed and the tool now is available)
-# garden.tool_library.return_tool(Steven.bookings[0], cleaned=True)
+# print(garden.tool_library.return_tool(Steven.bookings[0], cleaned=True).success)
 #
 # # Fouad report damage 
-# garden.tool_library.report_damage(Fouad.bookings[0], severity="medium")
+# print(garden.tool_library.report_damage(Fouad.bookings[0], severity="medium").success)
 # print(vars(Fouad.bookings[0]))
 
 
-### Bank Test
+### Bank Test 
 
 # ## admin add inventory itmes
 # garden.seed_bank.add_inventory_item(admin, "Fertilizer", quantity=5, reorder_threshold=10)
@@ -267,7 +267,7 @@ Mina.add_credits(200)
 #
 
 
-### Volunteer Test
+### Volunteer Test (Saged)
 
 # ## add shift & autmoatically check weather
 # shift_result = garden.volunteer_system.add_shift(admin, datetime.now(), duration_days=15)
@@ -300,45 +300,41 @@ Mina.add_credits(200)
 
 
 
-## MarketPlace Test
-
+## MarketPlace Test (Mina)
+#
 # # Fouad creates listings
-# print(garden.market_place.create_listing(Fouad,"tomato",10,"normal","potato"))
-# print(garden.market_place.ask_question(Fouad, "How to avoid over planting", 10))
-
-
+# print(garden.market_place.create_listing(Fouad,"tomato",10,"normal","potato").success)
+# print(garden.market_place.ask_question(Fouad, "How to avoid over planting", 10).success)
+#
+#
 #  # Mina view trades & questions
 # listings = garden.market_place.get_listings(Mina)
 # questions = garden.market_place.get_questions(Mina)
-# print(listings)
-# print(questions)
-
-
+# print("The market listings: ", listings)
+# print("The mareket questions: ", questions)
+#
+#
 # ## Mina trades
-# print(garden.market_place.request_trade(Mina, listings[0].id))
-
+# print(garden.market_place.request_trade(Mina, listings[0]).success)
+# #
+#
 # # ## Mina answers questions
-# print(garden.market_place.answer_question(Mina,  questions[0].id, "Try to divide your normal estimate by 2, and you will be fine"))
-
+# print(garden.market_place.answer_question(Mina,  questions[0], "Try to divide your normal estimate by 2, and you will mostly be fine").success)
+#
 # # Fouad view his listing's trades
-# listing_trades = garden.market_place.get_trades_by_listing(Fouad, Fouad.listings_ids[0])
-# print(listing_trades)
-
+# listing_trades = Fouad.listings[0].get_trades()
+# print("Your listing's trades", listing_trades)
+#
 # # # Fouad view his question's answer
-# question_answers = garden.market_place.get_answers_by_question(Fouad, Fouad.questions_ids[0])
-# print(question_answers)
-
-
+# question_answers = Fouad.questions[0].get_answers()
+# print("Yr Q's answers", question_answers)
+#
 # # # Fouad accept trade
-# print(garden.market_place.complete_trade(Fouad, listing_trades[0].id))
-
+# print(garden.market_place.complete_trade(Fouad, listing_trades[0]).success)
+#
 # # # # Fouad accept answer
-# print(garden.market_place.accept_answer(Fouad,Fouad.questions_ids[0],question_answers[0].id))
-
-
-
-
-
+# print(garden.market_place.accept_answer(Fouad,Fouad.questions[0],question_answers[0]).success)
+#
 
 
 

@@ -18,7 +18,12 @@ class Listing:
             self.expires_at = self.created_at + timedelta(hours=duration_hours)
         
         self.status = "active"
-        self.flags = []  # allergy flags
+        self.flags  = []  # allergy flags
+        self.trades = []
+    
+    def get_trades(self):
+        return self.trades
+
 
 
 # Trade
@@ -50,6 +55,9 @@ class Question:
         self.answers = []
         self.accepted_answer_id = None
         self.status = "open"
+
+    def get_answers(self):
+        return self.answers
 
 
 class Answer:

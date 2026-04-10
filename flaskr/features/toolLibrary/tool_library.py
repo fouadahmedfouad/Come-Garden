@@ -26,12 +26,45 @@ from features.toolLibrary.tool_library_results import (
     ToolResult
 )
 
+from features.toolLibrary.tool_library_events import *
+
 class ToolLibrary:
     def __init__(self):
         self.tools = {}
         self.bookings = {}
         self.penalties = {}
-        self.tasks = []
+
+        self.tasks  = []
+        self.events = []
+
+    def _emit_event(self, event):
+        self.events.append(event)
+        self._handle_event(event)
+
+    def _handle_event(self, event):
+
+        # Overdue tracking
+        if event.type == "tool_returned":
+            if event.data.get("late"):
+                print(f"[Alert] Late return by user {event.user_id}")
+            self.process_waitlist(event.data.get("tool_name"))
+
+        # Frequent penalties
+        if event.type == "penalty_applied":
+            user_penalties = self.penalties.get(event.user_id, [])
+            if len(user_penalties) > 5:
+                print(f"[Alert] Repeat offender: {event.user_id}")
+
+        # Tool damage tracking
+        if event.type == "tool_damaged":
+            if event.data["severity"] == "high":
+                print(f"[Critical] Tool {event.data['tool_name']} heavily damaged")
+
+        #  Usage analytics (example)
+        if event.type == "tool_booked":
+            tool = self.tools.get(event.data["tool_name"])
+            if tool and tool.total_usage_hours > tool.maintenance_threshold_hours:
+                print(f"[Alert] Tool {tool.name} needs maintenance")
 
     def book_tool(self, user, tool_name, duration_hours) -> BookingResult:
         """
@@ -39,7 +72,6 @@ class ToolLibrary:
         Handles availability, penalties, and waitlisting with robust error handling.
         """
         try:
-            # --- Input validation ---
             if not user or not hasattr(user, "id"):
                 raise InvalidUserError(user)
     
@@ -67,12 +99,21 @@ class ToolLibrary:
     
                 user.bookings = getattr(user, "bookings", [])
                 user.bookings.append(booking)
+
+                self._emit_event(
+                    ToolBooked(user.id, tool.name, booking.id)
+                )
     
                 return BookingResult(success=True, booking=booking)
 
             # --- Waitlist fallback ---
             score = self.calculate_priority(user.id)
             tool.waitlist.append((score, duration_hours, user))
+
+            self._emit_event(
+                ToolWaitlisted(user.id, tool_name)
+            )
+
             return BookingResult(success=False, waitlisted=True,
                                  error=f"Tool '{tool_name}' unavailable from {start_time} to {end_time}")
     
@@ -105,17 +146,25 @@ class ToolLibrary:
                 penalty = Penalty(booking.user_id, booking.id, "service", 2)
                 self.penalties.append(penalty)
                 booking.penalty_id = penalty.id
+
+                self._emit_event(
+                    PenaltyApplied(booking.user_id, penalty.type, severity)
+                )
     
-            if actual_return_date > required_return_time:
+            hours_used = (actual_return_date - booking.start_time).total_seconds() / 3600
+            late = actual_return_date > required_return_time
+
+            if late:
                 booking.status = "overdue"
             else:
                 booking.status = "completed"
-    
-            hours_used = (actual_return_date - booking.start_time).total_seconds() / 3600
-    
+   
             tool.return_tool(hours_used)
-            self.process_waitlist(tool.name)
 
+            self._emit_event(
+                ToolReturned(booking.user_id, booking.tool_name, late=late)
+            )
+            
             return OperationResult(success=True)
     
         except ToolLibraryError as e:
@@ -154,6 +203,14 @@ class ToolLibrary:
     
             self.penalties.setdefault(booking.user_id, []).append(penalty)
             booking.penalty_id = penalty.id
+
+            self._emit_event(
+                ToolDamaged(booking.user_id, tool.name, severity)
+            )
+
+            self._emit_event(
+                PenaltyApplied(booking.user_id, penalty.type, severity)
+            )
 
             return PenaltyResult(success=True, penalty=penalty)
 
@@ -232,9 +289,6 @@ class ToolLibrary:
                     return False
         return True
 
-    def has_pending_penalty(self, user_id):
-        return any(p.status == "pending" for p in self.penalties.get(user_id, []))
-
     def process_waitlist(self, tool_name):
         try:
             tool = self.tools.get(tool_name)
@@ -273,6 +327,11 @@ class ToolLibrary:
 
         except Exception:
             return None
+
+    def has_pending_penalty(self, user_id):
+        return any(p.status == "pending" for p in self.penalties.get(user_id, []))
+
+
 
     def daily_audit(self):
         """
