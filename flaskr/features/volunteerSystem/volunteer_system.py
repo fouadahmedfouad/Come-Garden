@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
 import uuid
 from datetime import datetime, timedelta
+
 from features.volunteerSystem.volunteer_system_exceptions import *
 from features.volunteerSystem.volunteer_system_results import *
 from features.volunteerSystem.volunteer_system_info import *
-
+from features.volunteerSystem.volunteer_system_events import *
 
 class VolunteerSystem:
     def __init__(self, weather_service=None):
@@ -12,6 +13,45 @@ class VolunteerSystem:
         self.shifts = {}
         self.ledger = ServiceLedger()
         self.weather_service = weather_service or WeatherService()
+
+        self.events = []
+
+    def _emit_event(self, event):
+        self.events.append(event)
+        self._handle_event(event)
+
+        # furture monitoring
+        # self.monitor.log(
+        #     action=event.type,
+        #     user_id=event.user_id,
+        #     metadata=event.data
+        # )
+
+    def _handle_event(self, event):
+
+        #  Weather anomaly tracking
+        if event.type == "shift_created" and event.data.get("rescheduled"):
+            print(f"[Info] Shift {event.data['shift_id']} rescheduled due to {event.data['weather']}")
+
+        # Fairness monitoring
+        if event.type == "members_assigned":
+            if event.data["count"] == 0:
+                print("[Alert] No members assigned to shift")
+
+        # Contribution tracking anomaly
+        if event.type == "shift_completed":
+            shift = self.shifts.get(event.data["shift_id"])
+            if shift and not shift.assignments:
+                print("[Alert] Shift completed with no assignments")
+
+        # Swap monitoring
+        if event.type == "swap_requested":
+            print(f"[Info] Swap requested from {event.user_id} → {event.data['target_id']}")
+
+        # Abuse detection
+        if event.type == "swap_requested":
+            ## may detect a too many swaps from some member
+            pass 
 
     def add_member(self, member_id, required_hours=10) -> OperationResult:
         try:
@@ -24,6 +64,9 @@ class VolunteerSystem:
                 "heavy_hours": 0
             }
 
+            self._emit_event(
+                MemberAdded(member_id, required_hours)
+            )
             return OperationResult(success=True)
 
         except VolunteerSystemError as e:
@@ -59,6 +102,15 @@ class VolunteerSystem:
 
             user.shifts = getattr(user, "shifts", [])
             user.shifts.append(shift)
+            
+            self._emit_event(
+                ShiftCreated(
+                    user.id,
+                    shift.id,
+                    rescheduled=rescheduled,
+                    weather=weather
+                )
+            )
 
             return ShiftResult(
                 success=True,
@@ -114,6 +166,10 @@ class VolunteerSystem:
 
             shift.assignments = assignments
 
+            self._emit_event(
+                MembersAssigned(user.id, shift.id, len(assignments))
+            )
+
             return AssignmentResult(True, assignments)
 
         except VolunteerSystemError as e:
@@ -143,6 +199,10 @@ class VolunteerSystem:
 
             shift.status = "completed"
 
+            self._emit_event(
+                ShiftCompleted(user.id, shift.id)
+            )
+
             return ShiftResult(True, shift)
 
         except VolunteerSystemError as e:
@@ -166,6 +226,10 @@ class VolunteerSystem:
 
             user.sent_swap_reqs.append(swap)
             target.swap_reqs.append(swap)
+
+            self._emit_event(
+                SwapRequested(user.id, target.id, shift.id)
+            )
 
             return SwapResult(True, swap)
 
@@ -191,6 +255,10 @@ class VolunteerSystem:
             assignment.user_id = request.target_id
             request.status = "approved"
 
+            self._emit_event(
+                SwapApproved(user.id, request.shift_id)
+            )
+
             return OperationResult(True)
 
         except VolunteerSystemError as e:
@@ -204,6 +272,11 @@ class VolunteerSystem:
                 raise SwapRequestError("Invalid request")
 
             request.status = "rejected"
+
+            self._emit_event(
+                SwapRejected(user.id, request.shift_id)
+            )
+
             return OperationResult(True)
 
         except VolunteerSystemError as e:

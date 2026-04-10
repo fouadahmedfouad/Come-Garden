@@ -41,6 +41,8 @@ class SeedBank:
         self.events.append(event)
         self._handle_event(event)
 
+        ## future monitoring
+
     def _handle_event(self, event):
         ## ALERTS 
         if event.type == "seed_withdrawn" and event.quantity > 50:
