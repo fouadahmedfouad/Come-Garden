@@ -3,8 +3,8 @@ from datetime import timedelta, datetime
 from member import Member, Admin
 from environment import TimeProvider, EnvService
 
-from services.plot_service import PlotService
-from services.rental_service import RentalService, Application
+from services.plot.plot_service import PlotService
+from services.rental.rental_service import RentalService
 
 from features.toolLibrary.tool_library import ToolLibrary
 from features.seedBank.seed_bank import SeedBank
@@ -102,7 +102,7 @@ class Garden:
        if today < last_day - timedelta(days=15):
            for plot in self.plots.values():  
             if plot.is_available():
-                self.rental_service.rent_plots(plot, current_season)
+                self.rental_service.rent_plot(plot, current_season)
 
     def audit_rental_alert(self):
         """ Alert before 15 days of the end of the season """
@@ -180,15 +180,19 @@ Saged = garden.join_member("Saged")
 Steven = garden.join_member("Steven")
 
 
-Fouad.add_credits(200)
-Mina.add_credits(200)
+# Fouad.add_credits(200)
+# Mina.add_credits(200)
+# Steven.add_credits(200)
+# Saged.add_credits(200)
+
+#
 
 
 
-
-## RENT TEST (Fouad)
-# garden.rental_service.apply(Fouad, garden.plots[1],share=0.5,auto_renew=False)
-# garden.rental_service.apply(Mina, garden.plots[1],share=1)
+# # RENT TEST (Fouad)
+# garden.rental_service.apply(Fouad, garden.plots[1],share=1,auto_renew=False)
+# garden.rental_service.apply(Mina, garden.plots[1],share=0.5)
+# garden.rental_service.apply(Steven, garden.plots[1],share=0.5)
 #
 # print(garden.plots[1].waitlist)
 # garden.audit_rent_plots()
@@ -198,8 +202,8 @@ Mina.add_credits(200)
 # print(garden.plots[1].get_owners())
 
 
-### Planting Test
-#
+## Planting Test
+
 # my_plot = garden.plots[1]
 #
 # garden.rental_service.apply(Fouad, my_plot,share=0.5)
@@ -215,11 +219,10 @@ Mina.add_credits(200)
 #
 # my_plot.generate_watering_schedule()
 # my_plot.generate_winter_tasks()
+# print(vars(my_plot))
 #
 # print(my_plot.neighbors)
 # print(garden.plots[2].alerts)
-# print(garden.plots[5].alerts)
-# print(garden.plots[6].alerts)
 
 
 
@@ -268,35 +271,35 @@ Mina.add_credits(200)
 
 
 ### Volunteer Test (Saged)
-
-## add shift & autmoatically check weather
-shift_result = garden.volunteer_system.add_shift(admin, datetime.now(), duration_days=15)
-print(shift_result.success)
-
-admin.shifts[0].add_task("Turn Compost",9,"heavy")
-admin.shifts[0].add_task("Turn Compost",9,"heavy")
-
+#
+# ## add shift & autmoatically check weather
+# shift_result = garden.volunteer_system.add_shift(admin, datetime.now(), duration_days=15)
+# print(shift_result.success)
+#
+# admin.shifts[0].add_task("Turn Compost",9,"heavy")
+# admin.shifts[0].add_task("Turn Compost",9,"heavy")
+#
 # print(admin.shifts)
 # print(admin.shifts[0].tasks)
-
-members = [Fouad, Saged]
-print(garden.volunteer_system.assign(admin,admin.shifts[0],members).success)
-
-print("Fouad's tasks", Fouad.tasks)
-print("Saged's tasks", Saged.tasks)
-
-print(garden.volunteer_system.complete_shift(admin, admin.shifts[0]).success)
-print("the shift", shift_result.shift.status)
-
-Fouad.tasks[0].complete_assignment()
-
-
-# Fouad requests a swap
-print(garden.volunteer_system.request_swap(Fouad, Saged, Saged.tasks[0]).success)
-
-# Saged Approves or Reject
-print(garden.volunteer_system.reject_swap(Saged, Saged.swap_reqs[0]).success)
-print(Fouad.sent_swap_reqs[0].status)
+#
+# members = [Fouad, Saged]
+# print(garden.volunteer_system.assign(admin,admin.shifts[0],members).success)
+#
+# print("Fouad's tasks", Fouad.tasks)
+# print("Saged's tasks", Saged.tasks)
+#
+# print(garden.volunteer_system.complete_shift(admin, admin.shifts[0]).success)
+# print("the shift", shift_result.shift.status)
+#
+# Fouad.tasks[0].complete_assignment()
+#
+#
+# # Fouad requests a swap
+# print(garden.volunteer_system.request_swap(Fouad, Saged, Saged.tasks[0]).success)
+#
+# # Saged Approves or Reject
+# print(garden.volunteer_system.reject_swap(Saged, Saged.swap_reqs[0]).success)
+# print(Fouad.sent_swap_reqs[0].status)
 
 
 

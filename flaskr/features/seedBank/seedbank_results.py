@@ -1,28 +1,30 @@
 
-class DepositResult:
-    def __init__(self, success: bool, batch=None, credits_added=0, error=None):
+class OperationResult:
+    def __init__(self, success: bool, error: str = None):
         self.success = success
+        self.error = error
+
+
+class DepositResult(OperationResult):
+    def __init__(self, success: bool, batch=None, credits_added=0, error=None):
+        super().__init__(success, error)
         self.batch = batch
         self.credits_added = credits_added
-        self.error = error
 
-class WithdrawResult:
+class WithdrawResult(OperationResult):
     def __init__(self, success: bool, batches=None, credits_used=0, error=None):
-        self.success = success
+        super().__init__(success, error)
         self.batches = batches or []
         self.credits_used = credits_used
-        self.error = error
 
-class InventoryResult:
+class InventoryResult(OperationResult):
     def __init__(self, success: bool, item=None, error=None):
-        self.success = success
+        super().__init__(success, error)
         self.item = item
-        self.error = error
 
 class HealthCheckResult:
     def __init__(self, success: bool, alerts=None, error=None):
-        self.success = success
+        super().__init__(success, error)
         self.alerts = alerts or []
-        self.error = error
 
 

@@ -70,3 +70,12 @@ SUN_SCHEDULE = {
         "9pm": 0.0,
     }
 }
+
+
+CROP_WATER_NEEDS = {
+        "carrot": {"freq": 3, "amount": 2},
+        "tomato": {"freq": 2, "amount": 3},
+        "lettuce": {"freq": 1, "amount": 2},
+        }
+
+
