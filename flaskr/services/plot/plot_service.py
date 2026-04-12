@@ -176,6 +176,9 @@ class PlotService():
 
 
     def report_infection(self, plot, infection_type, date):
+        #TODO: DO THIS
+        # plot.infect(infection_status, infection_type, date)
+
         plot.infection_status = "infected"
         plot.infection_type = infection_type
         plot.infection_date = date

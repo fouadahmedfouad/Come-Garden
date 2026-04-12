@@ -10,7 +10,6 @@ from services.rental.exceptions import (
     DuplicateParticipantError
 )
 
-from services.rental.enums import RentalStatus
 
 from services.rental.info import *
 from services.rental.exceptions import *
@@ -18,37 +17,15 @@ from services.rental.results import *
 from services.rental.events import *
 
 class RentalService:
-    def __init__(self):
+    def __init__(self, event_bus=None):
+        self.event_bus = event_bus
         self.events = []
-    
+
     def _emit_event(self, event):
-        self.events.append(event)
-        self._handle_event(event)
-
-        # future monoitoring
-        # self.monitor.log(
-        #     action=event.type,
-        #     user_id=event.user_id,
-        #     metadata=event.data
-        # )
-
-    def _handle_event(self, event):
-
-        # Demand monitoring
-        if event.type == "application_submitted":
-            print(f"[Info] Application for plot {event.data['plot_id']}")
-
-        # High demand
-        if event.type == "rental_waitlisted":
-            print(f"[Alert] Plot {event.data['plot_id']} is oversubscribed")
-
-        # Renewal tracking
-        if event.type == "rental_expired":
-            print(f"[Info] Rental cycle completed for plot {event.data['plot_id']}")
-
-        if event.type == "rental_failed":
-            print(f"[Fail] Rental failed by member {event.user_id} while renting plot {event.data['plot_id']} due to {event.data['message']}") 
-
+        self.events.append(event)   # optional debug log
+        if self.event_bus:
+            self.event_bus.publish(event)    
+   
     def apply(self, member, plot, share=1.0, auto_renew=False) -> ApplicationResult:
         try:
             if member is None:

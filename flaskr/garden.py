@@ -2,6 +2,7 @@ from datetime import timedelta, datetime
 
 from member import Member, Admin
 from environment import TimeProvider, EnvService
+from event import EventBus
 
 from services.plot.plot_service import PlotService
 from services.rental.rental_service import RentalService
@@ -10,6 +11,8 @@ from features.toolLibrary.tool_library import ToolLibrary
 from features.seedBank.seed_bank import SeedBank
 from features.volunteerSystem.volunteer_system import VolunteerSystem 
 from features.marketPlace.market_place   import Marketplace
+
+from observers import *
 
 
 from config import  PLOTS
@@ -21,26 +24,60 @@ class Garden:
         self.allotment_height = height
         self.road = road 
 
-        self.plot_service = PlotService()
-        self.rental_service = RentalService()
-
-
         self.members = {}
         self.members_by_name = {}
+
+        self.plots = {}
+
+        self.event_bus = EventBus()
+
+        self.plot_service = PlotService()
+        self.rental_service = RentalService(self.event_bus)
+
+        self.tool_library = ToolLibrary(self.event_bus)
+        self.seed_bank = SeedBank(self.event_bus)
+        self.volunteer_system = VolunteerSystem(self.event_bus)
+        self.market_place = Marketplace(self.event_bus)
 
         self.time_provider = TimeProvider() 
         self.env_service = EnvService(region="EG")
         self.env_service.initialize()
 
-      
-        self.plots = {}
-      
-        self.tool_library = ToolLibrary()
-        self.seed_bank = SeedBank()
-        self.volunteer_system = VolunteerSystem()
-        self.market_place = Marketplace()
-      
+     
+        self._register_observers()
 
+
+    def _register_observers(self):
+        mp_obs = MarketplaceObserver(self.market_place)
+        tool_obs = ToolLibraryObserver(self.tool_library)
+        seed_obs = SeedBankObserver(self.seed_bank)
+        rental_obs = RentalObserver()
+
+        # Marketplace observers
+        self.event_bus.subscribe("trade_completed", mp_obs.on_trade_completed)
+        self.event_bus.subscribe("answer_accepted", mp_obs.on_answer_accepted)
+
+        # Tool library observers
+        self.event_bus.subscribe("tool_returned", tool_obs.on_tool_returned)
+        self.event_bus.subscribe("tool_damaged", tool_obs.on_tool_damaged)
+        self.event_bus.subscribe("tool_booked", tool_obs.on_tool_booked)
+
+        # Seed bank observers
+        self.event_bus.subscribe("seed_withdrawn", seed_obs.on_seed_withdrawn)
+
+        # volunteer system observers
+        vol_obs = VolunteerObserver(self.volunteer_system)
+
+        self.event_bus.subscribe("shift_created", vol_obs.on_shift_created)
+        self.event_bus.subscribe("members_assigned", vol_obs.on_members_assigned)
+        self.event_bus.subscribe("shift_completed", vol_obs.on_shift_completed)
+        self.event_bus.subscribe("swap_requested", vol_obs.on_swap_requested)
+
+        # Rental observers
+        self.event_bus.subscribe("application_submitted", rental_obs.on_application_submitted)
+        self.event_bus.subscribe("rental_waitlisted", rental_obs.on_rental_waitlisted)
+        self.event_bus.subscribe("rental_expired", rental_obs.on_rental_expired)
+        self.event_bus.subscribe("rental_failed", rental_obs.on_rental_failed)
 
     def _generate_member_id(self):
         return len(self.members) + 1
@@ -167,7 +204,7 @@ class Garden:
  #
 
 garden = Garden(150,60).build()
-#garden.cad_render()
+# garden.cad_render()
 
 admin = Admin(100,"Garden Admin")
 garden.members[100] = admin
@@ -180,12 +217,10 @@ Saged = garden.join_member("Saged")
 Steven = garden.join_member("Steven")
 
 
-# Fouad.add_credits(200)
-# Mina.add_credits(200)
-# Steven.add_credits(200)
-# Saged.add_credits(200)
-
-#
+Fouad.add_credits(200)
+Mina.add_credits(200)
+Steven.add_credits(200)
+Saged.add_credits(200)
 
 
 
@@ -193,10 +228,8 @@ Steven = garden.join_member("Steven")
 # garden.rental_service.apply(Fouad, garden.plots[1],share=1,auto_renew=False)
 # garden.rental_service.apply(Mina, garden.plots[1],share=0.5)
 # garden.rental_service.apply(Steven, garden.plots[1],share=0.5)
-#
 # print(garden.plots[1].waitlist)
 # garden.audit_rent_plots()
-#
 # print(garden.plots[1].get_owners())
 # garden.audit_rental_end()
 # print(garden.plots[1].get_owners())
@@ -228,7 +261,7 @@ Steven = garden.join_member("Steven")
 
 
 ### Tool library Test (Steven)
-#
+
 # # admin add tools
 # print(garden.tool_library.add_tool(admin, "Rototiller", usage_status="high", maintenance_threshold_hours=5).success)
 #
@@ -245,8 +278,7 @@ Steven = garden.join_member("Steven")
 # print(garden.tool_library.return_tool(Steven.bookings[0], cleaned=True).success)
 #
 # # Fouad report damage 
-# print(garden.tool_library.report_damage(Fouad.bookings[0], severity="medium").success)
-# print(vars(Fouad.bookings[0]))
+# print(garden.tool_library.report_damage(Fouad.bookings[0], severity="high").success)
 
 
 ### Bank Test 
@@ -260,19 +292,19 @@ Steven = garden.join_member("Steven")
 #
 #
 # # Steven deposit high quaility tomato
-# garden.seed_bank.deposit(Steven, "tomato", quantity=10, viability=90, origin="Roma", gt_flag=True, age=5)
+# print(vars(garden.seed_bank.deposit(Steven, "tomato", quantity=25, viability=90, origin="Roma", gt_flag=True, age=5)))
 #
 # # Steven withdraw tomato
-# garden.seed_bank.withdraw(Steven,"tomato", quantity=5)
+# print(vars(garden.seed_bank.withdraw(Steven,"tomato", quantity=50)))
 #
 # # debug
 # garden.seed_bank.print_state()
-#
+# print(garden.seed_bank.events)
 
 
 ### Volunteer Test (Saged)
 #
-# ## add shift & autmoatically check weather
+## add shift & autmoatically check weather
 # shift_result = garden.volunteer_system.add_shift(admin, datetime.now(), duration_days=15)
 # print(shift_result.success)
 #
@@ -318,6 +350,7 @@ Steven = garden.join_member("Steven")
 #
 #
 # ## Mina trades
+# # print(vars(garden.seed_bank.deposit(Fouad, "tomato", quantity=50, viability=90, origin="Roma", gt_flag=True, age=5)))
 # print(garden.market_place.request_trade(Mina, listings[0]).success)
 # #
 #
@@ -337,7 +370,7 @@ Steven = garden.join_member("Steven")
 #
 # # # # Fouad accept answer
 # print(garden.market_place.accept_answer(Fouad,Fouad.questions[0],question_answers[0]).success)
-#
+# #
 
 
 

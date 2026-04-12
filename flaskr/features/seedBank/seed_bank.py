@@ -30,23 +30,18 @@ from features.seedBank.seedbank_events import (
 class SeedBank:
     HIGH_QUALITY_THRESHOLD = 80
 
-    def __init__(self):
+    def __init__(self, event_bus):
         self.seeds = {}
         self.inventory_items = {}
         self.members_balance = {}
-
+        
+        self.event_bus = event_bus
         self.events = []
 
     def _emit_event(self, event):
-        self.events.append(event)
-        self._handle_event(event)
-
-        ## future monitoring
-
-    def _handle_event(self, event):
-        ## ALERTS 
-        if event.type == "seed_withdrawn" and event.quantity > 50:
-            print(f"[Alert] Large withdrawal by user {event.user_id}")
+        self.events.append(event) # debug
+        if self.event_bus:
+            self.event_bus.publish(event)
 
 
     def deposit(self, user, seed_type, quantity, viability, origin, gt_flag, age, lah=True) -> DepositResult:
@@ -59,10 +54,11 @@ class SeedBank:
 
             self.seeds.setdefault(seed_type, []).append(batch)
 
-            credits_added = 0
+            credits_added = quantity
             if viability >= self.HIGH_QUALITY_THRESHOLD:
-                self.members_balance[user.id] = self.members_balance.get(user.id, 0) + quantity
-                credits_added = quantity
+                credits_added *= 2
+
+            self.members_balance[user.id] = self.members_balance.get(user.id, 0) + credits_added 
 
             self._emit_event(
                 SeedDeposited(user.id, seed_type, quantity, viability, origin)
@@ -84,9 +80,10 @@ class SeedBank:
             if seed_type not in self.seeds:
                 raise SeedTypeNotFoundError(seed_type)
 
-            required_credit = quantity / 2
-            available_credit = self.members_balance.get(user.id, 0)
 
+            required_credit = quantity
+            available_credit = self.members_balance.get(user.id, 0)
+            
             if available_credit < required_credit:
                 raise InsufficientCreditsError(user.id, required_credit, available_credit)
 
@@ -111,7 +108,8 @@ class SeedBank:
 
             self.seeds[seed_type] = [b for b in batches if b.quantity > 0]
 
-            self.members_balance[user.id] -= required_credit
+            self.members_balance[user.id] -= taken
+            print(self.members_balance[user.id])
 
             user.inventory = getattr(user, "inventory", [])
             user.inventory.extend(taken_batches)
@@ -173,7 +171,7 @@ class SeedBank:
             return HealthCheckResult(success=False, error=str(e))
 
         except Exception as e:
-            return HealthCheckResult(success=False, error=f"[Critical] Unexpected failure: {e}")
+            return HealthCheckResult(success=False, error=f"[Critical] Unexpected failure {e}")
 
     def check_inventory_alerts(self, user) -> HealthCheckResult:
         try:

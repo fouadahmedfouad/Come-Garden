@@ -8,50 +8,19 @@ from features.volunteerSystem.volunteer_system_info import *
 from features.volunteerSystem.volunteer_system_events import *
 
 class VolunteerSystem:
-    def __init__(self, weather_service=None):
+    def __init__(self, event_bus, weather_service=None):
         self.member_contribution = {}
         self.shifts = {}
         self.ledger = ServiceLedger()
         self.weather_service = weather_service or WeatherService()
 
+        self.event_bus = event_bus
         self.events = []
 
     def _emit_event(self, event):
-        self.events.append(event)
-        self._handle_event(event)
-
-        # furture monitoring
-        # self.monitor.log(
-        #     action=event.type,
-        #     user_id=event.user_id,
-        #     metadata=event.data
-        # )
-
-    def _handle_event(self, event):
-
-        #  Weather anomaly tracking
-        if event.type == "shift_created" and event.data.get("rescheduled"):
-            print(f"[Info] Shift {event.data['shift_id']} rescheduled due to {event.data['weather']}")
-
-        # Fairness monitoring
-        if event.type == "members_assigned":
-            if event.data["count"] == 0:
-                print("[Alert] No members assigned to shift")
-
-        # Contribution tracking anomaly
-        if event.type == "shift_completed":
-            shift = self.shifts.get(event.data["shift_id"])
-            if shift and not shift.assignments:
-                print("[Alert] Shift completed with no assignments")
-
-        # Swap monitoring
-        if event.type == "swap_requested":
-            print(f"[Info] Swap requested from {event.user_id} → {event.data['target_id']}")
-
-        # Abuse detection
-        if event.type == "swap_requested":
-            ## may detect a too many swaps from some member
-            pass 
+        self.events.append(event) # debug
+        if self.event_bus:
+            self.event_bus.publish(event)
 
     def add_member(self, member_id, required_hours=10) -> OperationResult:
         try:

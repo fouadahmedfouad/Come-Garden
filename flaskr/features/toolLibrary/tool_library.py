@@ -29,17 +29,19 @@ from features.toolLibrary.tool_library_results import (
 from features.toolLibrary.tool_library_events import *
 
 class ToolLibrary:
-    def __init__(self):
+    def __init__(self, event_bus):
         self.tools = {}
         self.bookings = {}
         self.penalties = {}
 
         self.tasks  = []
+        self.event_bus = event_bus
         self.events = []
 
     def _emit_event(self, event):
-        self.events.append(event)
-        self._handle_event(event)
+        self.events.append(event) # debug
+        if self.event_bus:
+            self.event_bus.publish(event)
        
         ## future monitoring
 

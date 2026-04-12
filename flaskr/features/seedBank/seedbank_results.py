@@ -22,7 +22,7 @@ class InventoryResult(OperationResult):
         super().__init__(success, error)
         self.item = item
 
-class HealthCheckResult:
+class HealthCheckResult(OperationResult):
     def __init__(self, success: bool, alerts=None, error=None):
         super().__init__(success, error)
         self.alerts = alerts or []

@@ -16,7 +16,7 @@ from features.marketPlace.market_place_events import *
 
 
 class Marketplace:
-    def __init__(self):
+    def __init__(self, event_bus):
         self.listings = {}
         self.questions = {}
 
@@ -25,31 +25,14 @@ class Marketplace:
         self.member_credits = {}
         
         # self.ratings = [] 
+        self.event_bus = event_bus
         self.events = []
 
 
     def _emit_event(self, event):
-        self.events.append(event)
-        self._handle_event(event)
-
-    def _handle_event(self, event):
-        # Alerts
-
-
-        # Karma system
-        if event.type == "trade_completed":
-            listing = self.listings.get(event.data["listing_id"])
-            if listing and listing.type == "gift":
-                user_id = event.user_id
-                self.member_karam[user_id] = self.member_karam.get(user_id, 0) + 10
-
-        # Bounty reward
-        if event.type == "answer_accepted":
-            responder_id = event.data.get("responder_id")
-            bounty = event.data.get("bounty", 0)
-
-            self.member_credits[responder_id] = \
-                self.member_credits.get(responder_id, 0) + bounty  
+        self.events.append(event) # debug
+        if self.event_bus:
+            self.event_bus.publish(event)
 
     def create_listing(self, user, item, quantity, listing_type="normal", request=None) -> ListingResult:
         try:
