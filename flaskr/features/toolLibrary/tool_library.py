@@ -35,9 +35,9 @@ class ToolLibrary:
         self.penalties = {}
 
         self.tasks  = []
-        self.event_bus = event_bus
         self.events = []
 
+        self.event_bus = event_bus
     def _emit_event(self, event):
         self.events.append(event) # debug
         if self.event_bus:

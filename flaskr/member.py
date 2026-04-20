@@ -7,6 +7,7 @@ class Member:
         
 
         self.credits = 0
+        self.seedBank_credits = 0
         self.contribution_points = 0 
         
         self.rental_history = []

@@ -116,7 +116,7 @@ class Marketplace:
             if not user:
                 raise InvalidUserError(user)
 
-            if user.credits < bounty:
+            if user.seedBank_credits < bounty:
                 raise QuestionError("Not enough credits")
 
             q = Question(user.id, content, bounty)
@@ -124,7 +124,7 @@ class Marketplace:
             user.questions = getattr(user, "questions", [])
             user.questions.append(q)
 
-            user.credits -= bounty
+            user.seedBank_credits = getattr(user, "seedBank_credits", 0) - bounty
             self.questions[q.id] = q
 
             self._emit_event(
@@ -165,6 +165,9 @@ class Marketplace:
             answer.accepted = True
             question.accepted_answer_id = answer
             question.status = "resolved"
+
+            responder = answer.responder
+            responder.seedBank_credits = getattr(responder, "seedBank_credits", 0) + question.bounty
 
             self._emit_event(
                 AnswerAccepted(

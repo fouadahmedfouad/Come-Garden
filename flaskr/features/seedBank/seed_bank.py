@@ -33,11 +33,11 @@ class SeedBank:
     def __init__(self, event_bus):
         self.seeds = {}
         self.inventory_items = {}
-        self.members_balance = {}
-        
+
         self.event_bus = event_bus
         self.events = []
 
+        # self.members_balance = {}
     def _emit_event(self, event):
         self.events.append(event) # debug
         if self.event_bus:
@@ -58,7 +58,8 @@ class SeedBank:
             if viability >= self.HIGH_QUALITY_THRESHOLD:
                 credits_added *= 2
 
-            self.members_balance[user.id] = self.members_balance.get(user.id, 0) + credits_added 
+            user.seedBank_credits = getattr(user, "seedBank_credits", 0) + credits_added
+            # self.members_balance[user.id] = self.members_balance.get(user.id, 0) + credits_added 
 
             self._emit_event(
                 SeedDeposited(user.id, seed_type, quantity, viability, origin)
@@ -82,7 +83,9 @@ class SeedBank:
 
 
             required_credit = quantity
-            available_credit = self.members_balance.get(user.id, 0)
+
+            available_credit = getattr(user, "seedBank_credits", 0)
+            # available_credit = self.members_balance.get(user.id, 0)
             
             if available_credit < required_credit:
                 raise InsufficientCreditsError(user.id, required_credit, available_credit)
@@ -108,8 +111,8 @@ class SeedBank:
 
             self.seeds[seed_type] = [b for b in batches if b.quantity > 0]
 
-            self.members_balance[user.id] -= taken
-            print(self.members_balance[user.id])
+            user.seedBank_credits = getattr(user, "seedBank_credits", 0) - taken 
+            # self.members_balance[user.id] -= taken
 
             user.inventory = getattr(user, "inventory", [])
             user.inventory.extend(taken_batches)
@@ -204,7 +207,7 @@ class SeedBank:
         for seed_type, batches in self.seeds.items():
             print(f"{seed_type}: {batches}")
 
-        print("\nMembers Balance:", self.members_balance)
+        #print("\nMembers Balance:", self.members_balance)
         print("\nInventory:", self.inventory_items)
 
         print("\nEvents:")

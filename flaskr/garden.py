@@ -174,37 +174,36 @@ class Garden:
     def add_plot(self,plot):
         self.plots[plot.id] = plot
 
- #    def cad_render(self):
- #        try: 
- #            from ocp_vscode  import show
- #            from cadquery import cq
- #    
- #        except ImportError:
- #            raise RuntimeError("cad_render requires cadquery and ocp_vscode installed")
- #    
- #        large_pts = self.large_pts
- #        small_pts = self.small_pts
- #    
- #        alt_w = self.allotment_width
- #        alt_h = self.allotment_height
- #        
- #        lw, lh = PLOTS["large"]["w"], PLOTS["large"]["h"]
- #        sw, sh = PLOTS["small"]["w"], PLOTS["small"]["h"] 
- #    
- #        alt_thickness = 1
- #        plt_thickness = 3
- #        
- #        allotment = cq.Workplane("front").rect(alt_w,alt_h).extrude(alt_thickness)
- #        if large_pts:
- #            allotment = allotment.pushPoints(large_pts).rect(lw, lh).extrude(plt_thickness)
- #        if small_pts:
- #            allotment = allotment.pushPoints(small_pts).rect(sw, sh).extrude(plt_thickness)
- # 
- #        show(allotment, reset_camera=True)        
- #
+    def cad_render(self):
+        try: 
+            from ocp_vscode  import show
+            from cadquery import cq
+    
+        except ImportError:
+            raise RuntimeError("cad_render requires cadquery and ocp_vscode installed")
+    
+        large_pts = self.large_pts
+        small_pts = self.small_pts
+    
+        alt_w = self.allotment_width
+        alt_h = self.allotment_height
+        
+        lw, lh = PLOTS["large"]["w"], PLOTS["large"]["h"]
+        sw, sh = PLOTS["small"]["w"], PLOTS["small"]["h"] 
+    
+        alt_thickness = 1
+        plt_thickness = 3
+        
+        allotment = cq.Workplane("front").rect(alt_w,alt_h).extrude(alt_thickness)
+        if large_pts:
+            allotment = allotment.pushPoints(large_pts).rect(lw, lh).extrude(plt_thickness)
+        if small_pts:
+            allotment = allotment.pushPoints(small_pts).rect(sw, sh).extrude(plt_thickness)
 
-garden = Garden(150,60).build()
-# garden.cad_render()
+        show(allotment, reset_camera=True)        
+
+garden = Garden(150,80).build()
+#garden.cad_render()
 
 admin = Admin(100,"Garden Admin")
 garden.members[100] = admin
@@ -283,71 +282,74 @@ Saged.add_credits(200)
 
 ### Bank Test 
 
-# ## admin add inventory itmes
+## admin add inventory itmes
 # garden.seed_bank.add_inventory_item(admin, "Fertilizer", quantity=5, reorder_threshold=10)
-#
+
 # # admin does checks
 # garden.seed_bank.check_inventory_alerts(admin)
 # garden.seed_bank.check_seed_health(admin)
-#
-#
-# # Steven deposit high quaility tomato
+
+# Steven deposit high quaility tomato
 # print(vars(garden.seed_bank.deposit(Steven, "tomato", quantity=25, viability=90, origin="Roma", gt_flag=True, age=5)))
-#
+# print("Credits" ,Steven.seedBank_credits)
 # # Steven withdraw tomato
 # print(vars(garden.seed_bank.withdraw(Steven,"tomato", quantity=50)))
-#
+
 # # debug
 # garden.seed_bank.print_state()
 # print(garden.seed_bank.events)
+# print("Credits" ,Steven.seedBank_credits)
 
 
-### Volunteer Test (Saged)
-#
-## add shift & autmoatically check weather
+## Volunteer Test (Saged)
+
+# # add shift & autmoatically check weather
 # shift_result = garden.volunteer_system.add_shift(admin, datetime.now(), duration_days=15)
 # print(shift_result.success)
-#
+
 # admin.shifts[0].add_task("Turn Compost",9,"heavy")
 # admin.shifts[0].add_task("Turn Compost",9,"heavy")
-#
+
 # print(admin.shifts)
 # print(admin.shifts[0].tasks)
-#
+
 # members = [Fouad, Saged]
 # print(garden.volunteer_system.assign(admin,admin.shifts[0],members).success)
-#
+
 # print("Fouad's tasks", Fouad.tasks)
 # print("Saged's tasks", Saged.tasks)
-#
+
 # print(garden.volunteer_system.complete_shift(admin, admin.shifts[0]).success)
 # print("the shift", shift_result.shift.status)
-#
+
 # Fouad.tasks[0].complete_assignment()
-#
-#
+
+
 # # Fouad requests a swap
 # print(garden.volunteer_system.request_swap(Fouad, Saged, Saged.tasks[0]).success)
-#
+
 # # Saged Approves or Reject
 # print(garden.volunteer_system.reject_swap(Saged, Saged.swap_reqs[0]).success)
 # print(Fouad.sent_swap_reqs[0].status)
 
 
-
 ## MarketPlace Test (Mina)
 #
-# # Fouad creates listings
+# Fouad creates listings
 # print(garden.market_place.create_listing(Fouad,"tomato",10,"normal","potato").success)
-# print(garden.market_place.ask_question(Fouad, "How to avoid over planting", 10).success)
+print(Fouad.seedBank_credits)
+print(Mina.seedBank_credits)
+
+
+print(garden.market_place.ask_question(Fouad, "How to avoid over planting", 10).error)
 #
 #
-#  # Mina view trades & questions
+ # Mina view trades & questions
 # listings = garden.market_place.get_listings(Mina)
-# questions = garden.market_place.get_questions(Mina)
+questions = garden.market_place.get_questions(Mina)
 # print("The market listings: ", listings)
-# print("The mareket questions: ", questions)
-#
+print("The mareket questions: ", questions)
+
 #
 # ## Mina trades
 # # print(vars(garden.seed_bank.deposit(Fouad, "tomato", quantity=50, viability=90, origin="Roma", gt_flag=True, age=5)))
@@ -355,14 +357,14 @@ Saged.add_credits(200)
 # #
 #
 # # ## Mina answers questions
-# print(garden.market_place.answer_question(Mina,  questions[0], "Try to divide your normal estimate by 2, and you will mostly be fine").success)
+#print(garden.market_place.answer_question(Mina,  questions[0], "Try to divide your normal estimate by 2, and you will mostly be fine").success)
 #
 # # Fouad view his listing's trades
 # listing_trades = Fouad.listings[0].get_trades()
 # print("Your listing's trades", listing_trades)
 #
 # # # Fouad view his question's answer
-# question_answers = Fouad.questions[0].get_answers()
+#question_answers = Fouad.questions[0].get_answers()
 # print("Yr Q's answers", question_answers)
 #
 # # # Fouad accept trade
@@ -370,7 +372,9 @@ Saged.add_credits(200)
 #
 # # # # Fouad accept answer
 # print(garden.market_place.accept_answer(Fouad,Fouad.questions[0],question_answers[0]).success)
-# #
+# # #
+# print(Fouad.seedBank_credits)
+# print(Mina.seedBank_credits)
 
 
 
